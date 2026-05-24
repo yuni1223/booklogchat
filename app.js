@@ -61,6 +61,7 @@ const elements = {
   detailAuthor: document.getElementById('detail-author'),
   detailCategory: document.getElementById('detail-category'),
   detailRelease: document.getElementById('detail-release'),
+  detailPublisher: document.getElementById('detail-publisher'),
   detailAsin: document.getElementById('detail-asin'),
   btnOpenBooklog: document.getElementById('btn-open-booklog'),
   btnDiscussBook: document.getElementById('btn-discuss-book'),
@@ -546,31 +547,212 @@ function filterAndRenderBooks() {
   renderBookshelf();
 }
 
+// Publisher normalization mapping logic
+function normalizePublisher(pub) {
+  if (!pub || pub === '不明') return '不明';
+  const p = pub.trim().toLowerCase();
+  
+  if (
+    p.includes('kadokawa') ||
+    p.includes('角川') ||
+    p.includes('アスキー') ||
+    p.includes('メディアワークス') ||
+    p.includes('エンターブレイン') ||
+    p.includes('富士見書房') ||
+    p.includes('電撃') ||
+    p.includes('中経出版')
+  ) {
+    return 'KADOKAWA';
+  }
+  return pub;
+}
+
+// Convert full-width characters and spaces to standard half-width ones
+function toHalfWidth(str) {
+  if (!str) return '';
+  return str.replace(/[！-～]/g, (s) => String.fromCharCode(s.charCodeAt(0) - 0xfee0))
+            .replace(/　/g, ' ');
+}
+
+// Parses release date string (e.g., 2021-05-25, 2021年05月25日) into comparable integer
+function parseReleaseDate(releaseStr) {
+  if (!releaseStr || releaseStr === '不明') return Infinity;
+  
+  const matches = releaseStr.match(/\d+/g);
+  if (!matches || matches.length === 0) return Infinity;
+  
+  const year = matches[0] || '0000';
+  const month = matches[1] || '00';
+  const day = matches[2] || '00';
+  
+  const paddedMonth = month.padStart(2, '0');
+  const paddedDay = day.padStart(2, '0');
+  
+  return parseInt(year + paddedMonth + paddedDay, 10);
+}
+
+// Constants for Roman numerals and special volume designations
+const ROMAN_NUMERALS = {
+  'I': 1, 'II': 2, 'III': 3, 'IV': 4, 'V': 5, 'VI': 6, 'VII': 7, 'VIII': 8, 'IX': 9, 'X': 10,
+  'XI': 11, 'XII': 12, 'XIII': 13, 'XIV': 14, 'XV': 15, 'XVI': 16, 'XVII': 17, 'XVIII': 18, 'XIX': 19, 'XX': 20,
+  'XXI': 21, 'XXII': 22, 'XXIII': 23, 'XXIV': 24, 'XXV': 25, 'XXVI': 26, 'XXVII': 27, 'XXVIII': 28, 'XXIX': 29, 'XXX': 30
+};
+
+const SPECIAL_VOLUMES = {
+  '上': 1, '上巻': 1, '前編': 1, '前': 1,
+  '中': 2, '中巻': 2, '中編': 2,
+  '下': 3, '下巻': 3, '後編': 3, '後': 3
+};
+
+// Parse a book title into base series title and mathematical volume integer
+function parseTitle(title) {
+  if (!title) return { base: '', volume: 0 };
+  
+  let cleanTitle = toHalfWidth(title).trim();
+  
+  // 1. Parentheses/brackets containing digits at the end: (10), [8], （５）
+  const parenRegex = /[\s(（[［<〈](\d+)[\s)）\]］>〉]$/;
+  const parenMatch = cleanTitle.match(parenRegex);
+  if (parenMatch) {
+    const vol = parseInt(parenMatch[1], 10);
+    const base = cleanTitle.replace(parenRegex, '').trim();
+    return { base, volume: vol };
+  }
+  
+  // 2. Roman numerals at the end (case-insensitive, optional boundaries): VIII, X, ix
+  const romanRegex = /\b(I|II|III|IV|V|VI|VII|VIII|IX|X|XI|XII|XIII|XIV|XV|XVI|XVII|XVIII|XIX|XX|XXI|XXII|XXIII|XXIV|XXV|XXVI|XXVII|XXVIII|XXIX|XXX)\b$/i;
+  const romanMatch = cleanTitle.match(romanRegex);
+  if (romanMatch) {
+    const roman = romanMatch[1].toUpperCase();
+    const vol = ROMAN_NUMERALS[roman];
+    if (vol !== undefined) {
+      const base = cleanTitle.replace(romanRegex, '').trim();
+      return { base, volume: vol };
+    }
+  }
+  
+  // 3. Traditional Japanese order suffixes at the end: 上, 中, 下, 前編, 後編
+  const specialRegex = /[\s(（[［<〈]?(上|上巻|前編|前|中|中巻|中編|下|下巻|後編|後)[）)\]］>〉]?$/;
+  const specialMatch = cleanTitle.match(specialRegex);
+  if (specialMatch) {
+    const word = specialMatch[1];
+    const vol = SPECIAL_VOLUMES[word];
+    if (vol !== undefined) {
+      const base = cleanTitle.replace(specialRegex, '').trim();
+      return { base, volume: vol };
+    }
+  }
+  
+  // 4. Trailing Arabic digits: 高校事変 10 or 高校事変10
+  const digitRegex = /(\s+|\b)(\d+)$/;
+  const digitMatch = cleanTitle.match(digitRegex);
+  if (digitMatch) {
+    const vol = parseInt(digitMatch[2], 10);
+    const base = cleanTitle.replace(digitRegex, '').trim();
+    return { base, volume: vol };
+  }
+
+  // 5. Hard trailing digits without spaces (e.g. 高校事変10 when no boundaries match)
+  const endDigitRegex = /(\D+)(\d+)$/;
+  const endDigitMatch = cleanTitle.match(endDigitRegex);
+  if (endDigitMatch) {
+    const vol = parseInt(endDigitMatch[2], 10);
+    const base = endDigitMatch[1].trim();
+    return { base, volume: vol };
+  }
+  
+  return { base: cleanTitle, volume: null };
+}
+
+// Compare two titles naturally (comparing base strings first, then volume numbers)
+function compareTitlesNaturally(titleA, titleB) {
+  const parsedA = parseTitle(titleA);
+  const parsedB = parseTitle(titleB);
+  
+  const baseCompare = parsedA.base.localeCompare(parsedB.base, 'ja');
+  if (baseCompare !== 0) {
+    return titleA.localeCompare(titleB, 'ja');
+  }
+  
+  if (parsedA.volume !== null && parsedB.volume !== null) {
+    return parsedA.volume - parsedB.volume;
+  }
+  
+  if (parsedA.volume === null && parsedB.volume !== null) return -1;
+  if (parsedA.volume !== null && parsedB.volume === null) return 1;
+  
+  return titleA.localeCompare(titleB, 'ja');
+}
+
 // Dynamic bookshelf sorting utility
 function sortBooks(books, rule) {
   const sorted = [...books];
   
   if (rule === 'publisher') {
     sorted.sort((a, b) => {
-      const pubA = a.publisher || '';
-      const pubB = b.publisher || '';
-      if (pubA === '不明' || !pubA) return 1;
-      if (pubB === '不明' || !pubB) return -1;
-      return pubA.localeCompare(pubB, 'ja');
+      // 1. Publisher normalization
+      const pubA = normalizePublisher(a.publisher);
+      const pubB = normalizePublisher(b.publisher);
+      if (pubA === '不明' && pubB !== '不明') return 1;
+      if (pubB === '不明' && pubA !== '不明') return -1;
+      const pubComp = pubA.localeCompare(pubB, 'ja');
+      if (pubComp !== 0) return pubComp;
+      
+      // 2. Author grouping
+      const authA = a.author || '';
+      const authB = b.author || '';
+      if (authA === '著者不明' && authB !== '著者不明') return 1;
+      if (authB === '著者不明' && authA !== '著者不明') return -1;
+      const authComp = authA.localeCompare(authB, 'ja');
+      if (authComp !== 0) return authComp;
+      
+      // 3. Chronological Release Date
+      const dateA = parseReleaseDate(a.release);
+      const dateB = parseReleaseDate(b.release);
+      if (dateA !== dateB) {
+        return dateA - dateB;
+      }
+      
+      // 4. Natural title sorting fallback
+      return compareTitlesNaturally(a.title, b.title);
     });
   } else if (rule === 'author') {
     sorted.sort((a, b) => {
+      // 1. Author grouping
       const authA = a.author || '';
       const authB = b.author || '';
-      if (authA === '著者不明') return 1;
-      if (authB === '著者不明') return -1;
-      return authA.localeCompare(authB, 'ja');
+      if (authA === '著者不明' && authB !== '著者不明') return 1;
+      if (authB === '著者不明' && authA !== '著者不明') return -1;
+      const authComp = authA.localeCompare(authB, 'ja');
+      if (authComp !== 0) return authComp;
+      
+      // 2. Chronological Release Date
+      const dateA = parseReleaseDate(a.release);
+      const dateB = parseReleaseDate(b.release);
+      if (dateA !== dateB) {
+        return dateA - dateB;
+      }
+      
+      // 3. Natural title sorting fallback
+      return compareTitlesNaturally(a.title, b.title);
     });
   } else if (rule === 'title') {
     sorted.sort((a, b) => {
-      const titleA = a.title || '';
-      const titleB = b.title || '';
-      return titleA.localeCompare(titleB, 'ja');
+      // 1. Natural title sorting
+      const titleComp = compareTitlesNaturally(a.title, b.title);
+      if (titleComp !== 0) return titleComp;
+      
+      // 2. Chronological Release Date
+      const dateA = parseReleaseDate(a.release);
+      const dateB = parseReleaseDate(b.release);
+      if (dateA !== dateB) {
+        return dateA - dateB;
+      }
+      
+      // 3. Author grouping fallback
+      const authA = a.author || '';
+      const authB = b.author || '';
+      return authA.localeCompare(authB, 'ja');
     });
   } else if (rule === 'added') {
     // Return sorted in original registration index order
@@ -592,6 +774,7 @@ function openBookDetailModal(book) {
   elements.detailAuthor.textContent = book.author;
   elements.detailCategory.textContent = `カテゴリ: ${translateCategory(book.category)}`;
   elements.detailRelease.textContent = `発売日: ${book.release}`;
+  elements.detailPublisher.textContent = `出版社: ${book.publisher || '不明'}`;
   elements.detailAsin.textContent = `ASIN/ISBN: ${book.asin}`;
   elements.btnOpenBooklog.href = book.url;
   
