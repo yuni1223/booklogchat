@@ -264,7 +264,7 @@ body {
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: 20px;
   padding-bottom: 24px;
-  direction: rtl; /* Flows cards from right to left like a Japanese bookshelf */
+  direction: ltr; /* Desktop flows from left to right as standard */
 }
 
 /* Book Glassmorphic Card */
@@ -1013,5 +1013,9 @@ body {
 
   .chat-footer {
     padding: 12px 16px;
+  }
+
+  .books-grid {
+    direction: rtl; /* Mobile flows right to left to prevent reading sequence issues on 2-column stacks */
   }
 }
