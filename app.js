@@ -27,6 +27,8 @@ const md = window.markdownit({
 
 // DOM Elements
 const elements = {
+  appContainer: document.querySelector('.app-container'),
+  mobileTabs: document.getElementById('mobile-tabs'),
   currentUsernameDisplay: document.getElementById('current-username-display'),
   booksGrid: document.getElementById('books-grid'),
   searchBooks: document.getElementById('search-books'),
@@ -70,6 +72,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Setup Event Listeners
 function setupEventListeners() {
+  // Mobile Tab toggler navigation listeners
+  elements.mobileTabs.addEventListener('click', (e) => {
+    const btn = e.target.closest('.mobile-tab-btn');
+    if (btn) {
+      const tab = btn.dataset.tab;
+      switchMobileTab(tab);
+    }
+  });
+
   // Sync button
   elements.btnSync.addEventListener('click', fetchBooklogData);
 
@@ -504,6 +515,10 @@ elements.btnDiscussBook.addEventListener('click', () => {
   if (detailModalActiveBook) {
     const book = detailModalActiveBook;
     closeBookDetailModal();
+    
+    // Auto switch mobile tab to chat view so they see the AI response start
+    switchMobileTab('chat');
+    
     sendDirectPrompt(`本棚にある「${book.title}」（著者: ${book.author}）について詳しく語り合いましょう！この本の内容、魅力、あなたの感想などを教えてください。`);
   }
 });
@@ -670,4 +685,26 @@ ${bookshelfContext}
   }
 
   return aiText;
+}
+
+// Switch active mobile view tab between Bookshelf and AI Chat
+function switchMobileTab(tab) {
+  document.querySelectorAll('.mobile-tab-btn').forEach(btn => {
+    if (btn.dataset.tab === tab) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+  });
+  
+  if (tab === 'chat') {
+    elements.appContainer.classList.add('show-chat');
+  } else {
+    elements.appContainer.classList.remove('show-chat');
+  }
+  
+  // Force scrolls to bottom if switching to chat
+  if (tab === 'chat') {
+    elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
+  }
 }
