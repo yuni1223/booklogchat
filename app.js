@@ -9,6 +9,8 @@ const state = {
   books: [],
   filteredBooks: [],
   selectedCategory: 'all',
+  selectedStatus: 'all', // status filter (読んだ本, 読みたい本, 積読, etc.)
+  currentSortRule: 'publisher', // default sorting rule: 出版社順
   searchQuery: '',
   chatHistory: [
     {
@@ -29,6 +31,8 @@ const md = window.markdownit({
 const elements = {
   appContainer: document.querySelector('.app-container'),
   mobileTabs: document.getElementById('mobile-tabs'),
+  statusFilters: document.getElementById('status-filters'),
+  sortOrder: document.getElementById('sort-order'),
   currentUsernameDisplay: document.getElementById('current-username-display'),
   booksGrid: document.getElementById('books-grid'),
   searchBooks: document.getElementById('search-books'),
@@ -99,6 +103,24 @@ function setupEventListeners() {
   // Search input change
   elements.searchBooks.addEventListener('input', (e) => {
     state.searchQuery = e.target.value.toLowerCase();
+    filterAndRenderBooks();
+  });
+
+  // Status Filter click listeners (読んだ本, 読みたい本, 積読, etc.)
+  elements.statusFilters.addEventListener('click', (e) => {
+    const btn = e.target.closest('.filter-btn');
+    if (btn) {
+      document.querySelectorAll('#status-filters .filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.selectedStatus = btn.dataset.status;
+      filterAndRenderBooks();
+    }
+  });
+
+  // Sorting selection dropdown listener
+  elements.sortOrder.addEventListener('change', (e) => {
+    state.currentSortRule = e.target.value;
+    state.books = sortBooks(state.books, state.currentSortRule);
     filterAndRenderBooks();
   });
 
@@ -173,13 +195,18 @@ function saveSettings() {
   fetchBooklogData();
 }
 
-// Fetch public bookshelf from Booklog (via CORS proxy with automatic fallback)
+// Fetch public bookshelf from Booklog (via CORS proxy with automatic fallback and parallel status queries)
 async function fetchBooklogData() {
   renderLoadingState();
   elements.chatStatus.textContent = '本棚をロード中...';
 
-  // We request up to 10000 books from Booklog to ensure large bookshelves are loaded fully
-  const booklogApiUrl = `https://api.booklog.jp/json/${state.username}?count=10000`;
+  // We query all 4 standard reading statuses in Booklog
+  const statuses = [
+    { id: 3, label: '読んだ本' },
+    { id: 1, label: '読みたい本' },
+    { id: 4, label: '積読' },
+    { id: 2, label: 'いま読んでる本' }
+  ];
 
   // Resilient fallback CORS proxy configurations
   const proxies = [
@@ -188,80 +215,93 @@ async function fetchBooklogData() {
     url => `https://corsproxy.io/?${encodeURIComponent(url)}`
   ];
 
-  let success = false;
-  let data = null;
+  let combinedBooks = [];
   let lastError = null;
 
-  // Try each proxy sequentially until one succeeds
-  for (let i = 0; i < proxies.length; i++) {
-    const proxiedUrl = proxies[i](booklogApiUrl);
-    console.log(`Syncing Booklog via CORS proxy ${i + 1}/${proxies.length}...`);
-    try {
-      const response = await fetch(proxiedUrl);
-      if (!response.ok) {
-        throw new Error(`HTTP Error ${response.status}`);
-      }
-      data = await response.json();
-      
-      if (data && data.books) {
-        success = true;
-        console.log(`Proxy ${i + 1} succeeded!`);
-        break;
-      } else {
-        throw new Error('本棚の書籍データが見つかりません');
-      }
-    } catch (error) {
-      console.warn(`Proxy ${i + 1} failed:`, error.message);
-      lastError = error;
-    }
-  }
+  try {
+    const promises = statuses.map(async (status, index) => {
+      const booklogApiUrl = `https://api.booklog.jp/json/${state.username}?status=${status.id}&count=10000`;
+      let success = false;
+      let data = null;
 
-  if (success && data) {
-    try {
-      state.books = data.books.map(book => {
-        // Extract ASIN/ISBN from URL
-        let asin = '不明';
-        if (book.url) {
-          const parts = book.url.split('/');
-          const lastPart = parts[parts.length - 1];
-          if (lastPart && /^[0-9Xx]{10,13}$/.test(lastPart)) {
-            asin = lastPart;
+      // Try each proxy sequentially for this status
+      for (let i = 0; i < proxies.length; i++) {
+        const proxiedUrl = proxies[i](booklogApiUrl);
+        try {
+          const response = await fetch(proxiedUrl);
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
           }
+          data = await response.json();
+          if (data && data.books) {
+            success = true;
+            break;
+          }
+        } catch (error) {
+          lastError = error;
         }
-        
-        let coverImage = book.image || 'https://via.placeholder.com/150x220?text=No+Image';
-        // Clean Amazon low-res thumbnail size modifiers (like _SL75_) to get high-res covers!
-        if (coverImage.includes('amazon.com') || coverImage.includes('media-amazon.com')) {
-          coverImage = coverImage.replace(/\._S[LXY]\d+(_S[LXY]\d+)?_/gi, '._SL320_');
-        }
-        
-        return {
-          title: book.title || '無題',
-          author: book.author || '著者不明',
-          image: coverImage,
-          category: book.catalog || 'その他',
-          release: book.release || '不明',
-          asin: asin,
-          url: book.url || `https://booklog.jp/item/1/${asin}`
-        };
-      });
-      state.filteredBooks = [...state.books];
-      
-      elements.chatStatus.textContent = `${state.books.length}冊の本棚データを認識`;
-      renderBookshelf();
-      renderCategoryFilters();
+      }
 
-      // Enrich with OpenBD in background to populate author/release metadata
-      enrichBookMetadata();
-    } catch (mappingError) {
-      console.error('Data mapping error:', mappingError);
-      renderErrorState('書籍データの解析中にエラーが発生しました。');
+      if (success && data && data.books) {
+        return data.books.map((book, bookIdx) => {
+          let asin = '不明';
+          if (book.url) {
+            const parts = book.url.split('/');
+            const lastPart = parts[parts.length - 1];
+            if (lastPart && /^[0-9Xx]{10,13}$/.test(lastPart)) {
+              asin = lastPart;
+            }
+          }
+          
+          let coverImage = book.image || 'https://via.placeholder.com/150x220?text=No+Image';
+          if (coverImage.includes('amazon.com') || coverImage.includes('media-amazon.com')) {
+            coverImage = coverImage.replace(/\._S[LXY]\d+(_S[LXY]\d+)?_/gi, '._SL320_');
+          }
+
+          // Use unique indices combining status and index to ensure stable custom sorting
+          const originalIndex = (status.id * 100000) + bookIdx;
+
+          return {
+            title: book.title || '無題',
+            author: book.author || '著者不明',
+            image: coverImage,
+            category: book.catalog || 'その他',
+            release: book.release || '不明',
+            publisher: '不明', // will be enriched
+            asin: asin,
+            url: book.url || `https://booklog.jp/item/1/${asin}`,
+            status: status.label,
+            originalIndex: originalIndex
+          };
+        });
+      }
+      return [];
+    });
+
+    const statusResults = await Promise.all(promises);
+    combinedBooks = statusResults.flat();
+
+    if (combinedBooks.length === 0) {
+      throw new Error(lastError ? lastError.message : '書籍データが見見つかりませんでした。ユーザー名が正しいかご確認ください。');
     }
-  } else {
-    console.error('All proxies failed. Last error:', lastError);
+
+    state.books = combinedBooks;
+    
+    // Sort initially by default order (publisher)
+    state.books = sortBooks(state.books, state.currentSortRule);
+    state.filteredBooks = [...state.books];
+    
+    elements.chatStatus.textContent = `${state.books.length}冊の本棚データを認識`;
+    renderBookshelf();
+    renderCategoryFilters();
+
+    // Enrich with OpenBD in background to populate author/release/publisher metadata
+    enrichBookMetadata();
+  } catch (error) {
+    console.error('All proxies failed. Last error:', error);
     elements.chatStatus.textContent = '本棚データの取得失敗';
     
-    let displayMessage = lastError ? lastError.message : '接続に失敗しました。';
+    let displayMessage = error.message;
     if (displayMessage.includes('403')) {
       displayMessage += ' (ブクログ側またはプロキシサーバーにより接続が制限されています。しばらく時間をおいてお試しください)';
     }
@@ -326,6 +366,7 @@ async function enrichBookMetadata() {
         const isbn13 = item.summary.isbn;
         const author = cleanAuthorName(item.summary.author);
         const pubdate = formatPubDate(item.summary.pubdate);
+        const publisher = item.summary.publisher || '不明';
         const cover = item.summary.cover;
         
         // Find matching book in our list
@@ -338,6 +379,9 @@ async function enrichBookMetadata() {
           if (pubdate && pubdate !== '不明') {
             matchedBook.release = pubdate;
           }
+          if (publisher && publisher !== '不明') {
+            matchedBook.publisher = publisher;
+          }
           // If OpenBD has a high-res cover image, use it!
           if (cover) {
             matchedBook.image = cover;
@@ -346,8 +390,11 @@ async function enrichBookMetadata() {
       }
     });
 
-    console.log(`Successfully enriched author info for ${enrichedCount} books.`);
+    console.log(`Successfully enriched author/publisher info for ${enrichedCount} books.`);
     elements.chatStatus.textContent = `${state.books.length}冊の本棚データを同期完了`;
+    
+    // Re-sort the books based on the newly loaded publisher metadata!
+    state.books = sortBooks(state.books, state.currentSortRule);
     
     // Re-render bookshelf with newly loaded details
     filterAndRenderBooks();
@@ -491,11 +538,45 @@ function translateCategory(cat) {
 function filterAndRenderBooks() {
   state.filteredBooks = state.books.filter(book => {
     const matchesCategory = state.selectedCategory === 'all' || book.category === state.selectedCategory;
+    const matchesStatus = state.selectedStatus === 'all' || book.status === state.selectedStatus;
     const matchesSearch = book.title.toLowerCase().includes(state.searchQuery) || 
                           book.author.toLowerCase().includes(state.searchQuery);
-    return matchesCategory && matchesSearch;
+    return matchesCategory && matchesStatus && matchesSearch;
   });
   renderBookshelf();
+}
+
+// Dynamic bookshelf sorting utility
+function sortBooks(books, rule) {
+  const sorted = [...books];
+  
+  if (rule === 'publisher') {
+    sorted.sort((a, b) => {
+      const pubA = a.publisher || '';
+      const pubB = b.publisher || '';
+      if (pubA === '不明' || !pubA) return 1;
+      if (pubB === '不明' || !pubB) return -1;
+      return pubA.localeCompare(pubB, 'ja');
+    });
+  } else if (rule === 'author') {
+    sorted.sort((a, b) => {
+      const authA = a.author || '';
+      const authB = b.author || '';
+      if (authA === '著者不明') return 1;
+      if (authB === '著者不明') return -1;
+      return authA.localeCompare(authB, 'ja');
+    });
+  } else if (rule === 'title') {
+    sorted.sort((a, b) => {
+      const titleA = a.title || '';
+      const titleB = b.title || '';
+      return titleA.localeCompare(titleB, 'ja');
+    });
+  } else if (rule === 'added') {
+    // Return sorted in original registration index order
+    return sorted.sort((a, b) => a.originalIndex - b.originalIndex);
+  }
+  return sorted;
 }
 
 // Book Detail Modal popup triggers
