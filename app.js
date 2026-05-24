@@ -264,7 +264,7 @@ async function fetchBooklogData() {
 
           return {
             title: book.title || '無題',
-            author: book.author || '著者不明',
+            author: cleanAuthorName(book.author || '著者不明'),
             image: coverImage,
             category: book.catalog || 'その他',
             release: book.release || '不明',
@@ -373,9 +373,12 @@ async function enrichBookMetadata() {
         // Find matching book in our list
         const matchedBook = isbnMap[isbn13];
         if (matchedBook) {
-          if (author && author !== '著者不明') {
-            matchedBook.author = author;
-            enrichedCount++;
+          // PROTECT AUTHOR: Only overwrite if Booklog author is unknown
+          if (matchedBook.author === '著者不明') {
+            if (author && author !== '著者不明') {
+              matchedBook.author = author;
+              enrichedCount++;
+            }
           }
           if (pubdate && pubdate !== '不明') {
             matchedBook.release = pubdate;
@@ -609,6 +612,12 @@ function parseTitle(title) {
   if (!title) return { base: '', volume: 0 };
   
   let cleanTitle = toHalfWidth(title).trim();
+  
+  // Strip trailing publisher/meta brackets containing non-digits (e.g. "(新潮文庫)", "（角川文庫）")
+  const trailingParenNonDigitRegex = /[\s(（[［<〈]([^)）\]］>〉]*\D+[^)）\]］>〉]*)[\s)）\]］>〉]$/;
+  if (cleanTitle.match(trailingParenNonDigitRegex)) {
+    cleanTitle = cleanTitle.replace(trailingParenNonDigitRegex, '').trim();
+  }
   
   // 1. Parentheses/brackets containing digits at the end: (10), [8], （５）
   const parenRegex = /[\s(（[［<〈](\d+)[\s)）\]］>〉]$/;
