@@ -59,7 +59,7 @@
         </div>
       </header>
 
-      <!-- Controls Bar: Search & Category Filters -->
+      <!-- Controls Bar: Search, Status Filters & Sorting -->
       <section class="controls-bar">
         <div class="search-wrapper">
           <input type="text" id="search-books" class="search-input" placeholder="本棚内を検索（タイトル、著者）...">
@@ -68,9 +68,30 @@
           </svg>
         </div>
         
-        <div class="filter-group" id="category-filters">
+        <!-- Status Filter Group (読んだ本, 読みたい本, 積読, etc.) -->
+        <div class="filter-group" id="status-filters">
+          <button class="filter-btn active" data-status="all">すべて</button>
+          <button class="filter-btn" data-status="読んだ本">読んだ本</button>
+          <button class="filter-btn" data-status="読みたい本">読みたい本</button>
+          <button class="filter-btn" data-status="積読">積読</button>
+          <button class="filter-btn" data-status="いま読んでる本">いま読んでる本</button>
+        </div>
+
+        <!-- Sorting Selector -->
+        <div class="sort-wrapper">
+          <select id="sort-order" class="form-control" style="width: 170px; background: var(--glass-bg); border: 1px solid var(--glass-border); color: var(--text-primary); border-radius: var(--radius-md); padding: 8px 12px; font-family: var(--font-body); font-size: 13px; font-weight: 500; cursor: pointer; transition: var(--transition-smooth);">
+            <option value="publisher">並び替え: 出版社順</option>
+            <option value="author">並び替え: 著者名順</option>
+            <option value="title">並び替え: 五十音順</option>
+            <option value="added">並び替え: 登録順</option>
+          </select>
+        </div>
+      </section>
+
+      <!-- Sub Controls Bar: Dynamic Book Category Filters -->
+      <section class="controls-bar" style="margin-top: -12px; margin-bottom: 24px;">
+        <div class="filter-group" id="category-filters" style="background: transparent; border: none; padding: 0; display: flex; flex-wrap: wrap; gap: 8px;">
           <button class="filter-btn active" data-category="all">すべて</button>
-          <!-- Additional category buttons will be generated dynamically -->
         </div>
       </section>
 
