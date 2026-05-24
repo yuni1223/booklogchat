@@ -4,7 +4,7 @@
 
 // App State Management
 const state = {
-  username: localStorage.getItem('booklog_username') || 'hec', // Default sample user
+  username: localStorage.getItem('booklog_username') || 'yuni0228', // Default to user's public bookshelf
   geminiKey: localStorage.getItem('gemini_api_key') || '',
   books: [],
   filteredBooks: [],
