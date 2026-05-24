@@ -910,3 +910,106 @@ body {
   font-style: italic;
   margin: 10px 0;
 }
+
+/* ==========================================================================
+   Mobile Tabs Layout Updates (Responsive Single-Screen Toggle)
+   ========================================================================== */
+
+/* Mobile Tab Switcher Navigation (Hidden by default on Desktop) */
+.mobile-tabs {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  /* Restructure container to single column stack */
+  .app-container {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* Show the mobile tab bar with premium glassmorphic layout */
+  .mobile-tabs {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    background: rgba(15, 17, 26, 0.85);
+    backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--glass-border);
+    padding: 8px 16px;
+    z-index: 100;
+  }
+
+  .mobile-tab-btn {
+    flex: 1;
+    max-width: 140px;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    padding: 8px 12px;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-family: var(--font-heading);
+    font-size: 14px;
+    font-weight: 600;
+    transition: var(--transition-bounce);
+  }
+
+  .mobile-tab-btn:hover {
+    color: var(--text-primary);
+  }
+
+  .mobile-tab-btn.active {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--glass-border);
+    color: var(--accent-indigo);
+    box-shadow: var(--shadow-sm), var(--shadow-glow);
+  }
+
+  .mobile-tab-btn.active svg {
+    color: var(--accent-indigo);
+    filter: drop-shadow(0 0 4px var(--accent-indigo));
+  }
+
+  /* Handle mobile panel display toggle based on active class */
+  .dashboard-panel, .chat-panel {
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+    transition: opacity 0.3s ease;
+  }
+
+  .app-container:not(.show-chat) .chat-panel {
+    display: none !important;
+  }
+
+  .app-container.show-chat .dashboard-panel {
+    display: none !important;
+  }
+  
+  .dashboard-panel {
+    padding: 16px 16px 24px 16px;
+  }
+
+  /* Chat panel spacing adjustments for mobile screens */
+  .chat-panel {
+    border-left: none;
+  }
+
+  .chat-header {
+    padding: 12px 16px;
+  }
+
+  .chat-messages {
+    padding: 16px;
+  }
+
+  .chat-footer {
+    padding: 12px 16px;
+  }
+}
