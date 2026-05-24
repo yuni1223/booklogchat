@@ -264,10 +264,12 @@ body {
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: 20px;
   padding-bottom: 24px;
+  direction: rtl; /* Flows cards from right to left like a Japanese bookshelf */
 }
 
 /* Book Glassmorphic Card */
 .book-card {
+  direction: ltr; /* Keeps content (text, cover) reading standard left-to-right */
   background: var(--glass-bg);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-md);
