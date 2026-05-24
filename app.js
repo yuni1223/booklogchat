@@ -228,10 +228,17 @@ async function fetchBooklogData() {
             asin = lastPart;
           }
         }
+        
+        let coverImage = book.image || 'https://via.placeholder.com/150x220?text=No+Image';
+        // Clean Amazon low-res thumbnail size modifiers (like _SL75_) to get high-res covers!
+        if (coverImage.includes('amazon.com') || coverImage.includes('media-amazon.com')) {
+          coverImage = coverImage.replace(/\._S[LXY]\d+(_S[LXY]\d+)?_/gi, '._SL320_');
+        }
+        
         return {
           title: book.title || '無題',
           author: book.author || '著者不明',
-          image: book.image || 'https://via.placeholder.com/150x220?text=No+Image',
+          image: coverImage,
           category: book.catalog || 'その他',
           release: book.release || '不明',
           asin: asin,
@@ -319,6 +326,7 @@ async function enrichBookMetadata() {
         const isbn13 = item.summary.isbn;
         const author = cleanAuthorName(item.summary.author);
         const pubdate = formatPubDate(item.summary.pubdate);
+        const cover = item.summary.cover;
         
         // Find matching book in our list
         const matchedBook = isbnMap[isbn13];
@@ -329,6 +337,10 @@ async function enrichBookMetadata() {
           }
           if (pubdate && pubdate !== '不明') {
             matchedBook.release = pubdate;
+          }
+          // If OpenBD has a high-res cover image, use it!
+          if (cover) {
+            matchedBook.image = cover;
           }
         }
       }
