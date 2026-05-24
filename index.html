@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Booklog AI Chat - ブクログ本棚対話システム</title>
+  <link rel="stylesheet" href="styles.css">
+  <!-- Markdown parser CDN to render beautiful AI responses -->
+  <script src="https://cdn.jsdelivr.net/npm/markdown-it@14.1.0/dist/markdown-it.min.js"></script>
+</head>
+<body>
+
+  <div class="app-container">
+    
+    <!-- Left Column: Bookshelf Dashboard -->
+    <main class="dashboard-panel">
+      
+      <!-- App Header -->
+      <header class="app-header">
+        <div class="brand">
+          <div class="brand-icon">B</div>
+          <div>
+            <h1>Booklog AI Chat</h1>
+            <span class="user-badge">
+              <span class="status-dot"></span>
+              <span id="current-username-display">読み込み中...</span>
+            </span>
+          </div>
+        </div>
+        
+        <div class="header-actions">
+          <button id="btn-sync" class="btn-icon" title="本棚の同期">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+            </svg>
+          </button>
+          <button id="btn-settings" class="btn-icon" title="設定">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.43l-1.003.828c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.43l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- Controls Bar: Search & Category Filters -->
+      <section class="controls-bar">
+        <div class="search-wrapper">
+          <input type="text" id="search-books" class="search-input" placeholder="本棚内を検索（タイトル、著者）...">
+          <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="18" height="18">
+            <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.602 10.602Z" />
+          </svg>
+        </div>
+        
+        <div class="filter-group" id="category-filters">
+          <button class="filter-btn active" data-category="all">すべて</button>
+          <!-- Additional category buttons will be generated dynamically -->
+        </div>
+      </section>
+
+      <!-- Bookshelf Scrolling Grid Area -->
+      <section class="bookshelf-container">
+        <div id="books-grid" class="books-grid">
+          <!-- Loaded book cards will be generated here -->
+          <div class="loading-state">
+            <div class="spinner"></div>
+            <p>ブクログのデータを読み込み中...</p>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Right Column: Gemini Chat Sidebar -->
+    <aside class="chat-panel">
+      
+      <!-- Chat Header -->
+      <header class="chat-header">
+        <div class="chat-header-title">
+          <h2>AI Book Assistant</h2>
+          <span id="chat-status">本棚のデータを認識しました</span>
+        </div>
+        <button id="btn-clear-chat" class="btn-icon" title="チャット履歴を消去">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="18" height="18">
+            <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+          </svg>
+        </button>
+      </header>
+
+      <!-- Chat Conversation Messages -->
+      <section class="chat-messages" id="chat-messages">
+        <!-- Message bubbles dynamically added here -->
+        <div class="message ai">
+          <div class="message-content">
+            こんにちは！あなたのブクログ本棚の登録情報を読み込みました。本棚の傾向分析や、特定の書籍について質問、次のおすすめ本の相談など、なんでも聞いてくださいね！
+          </div>
+          <span class="message-time">システム</span>
+        </div>
+      </section>
+
+      <!-- Chat Control Footer Area -->
+      <footer class="chat-footer">
+        
+        <!-- Suggestions/Quick Prompt Chips -->
+        <div class="chat-suggestions" id="chat-suggestions">
+          <span class="suggestion-chip" data-prompt="私の本棚のジャンル傾向を分析して！">📊 ジャンル傾向の分析</span>
+          <span class="suggestion-chip" data-prompt="本棚にある本をもとに、次におすすめの書籍を提案して？">📚 次のオススメ本</span>
+          <span class="suggestion-chip" data-prompt="この本棚の中で特に評価の高いものや代表的な書籍は？">🏆 人気・代表的な本</span>
+          <span class="suggestion-chip" data-prompt="積読（読みたい本）からランダムで1冊選んで魅力を教えて！">🎲 読みたい本から推薦</span>
+        </div>
+
+        <!-- Chat Input Form Wrapper -->
+        <div class="chat-input-wrapper">
+          <textarea id="chat-input" class="chat-input" placeholder="本棚についてAIに質問する... (Ctrl+Enterで送信)" rows="1"></textarea>
+          <button id="btn-send" class="send-btn" title="送信">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" />
+            </svg>
+          </button>
+        </div>
+
+      </footer>
+
+    </aside>
+
+  </div>
+
+  <!-- Settings Modal (Config Overlay) -->
+  <div id="settings-modal" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>アプリケーション設定</h3>
+        <button id="btn-close-settings" class="btn-icon" style="width: 32px; height: 32px;">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="16" height="16">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <div class="form-group">
+        <label for="input-booklog-username">ブクログユーザー名 (ID)</label>
+        <input type="text" id="input-booklog-username" class="form-control" placeholder="例: hec, chito">
+        <span class="form-help">
+          ご自身のブクログ本棚のURLが <code>https://booklog.jp/users/your-id</code> の場合、<code>your-id</code> を入力してください。
+        </span>
+      </div>
+
+      <div class="form-group">
+        <label for="input-gemini-key">Gemini API キー</label>
+        <input type="password" id="input-gemini-key" class="form-control" placeholder="AI Studioで取得したAPIキーを入力">
+        <span class="form-help">
+          チャット機能の利用に必要です。APIキーは <a href="https://aistudio.google.com/" target="_blank">Google AI Studio</a> から無料で取得できます。キーはお使いのブラウザにのみ安全に保存され、第三者に送信されることはありません。
+        </span>
+      </div>
+
+      <div class="modal-actions">
+        <button id="btn-cancel-settings" class="btn-secondary btn">キャンセル</button>
+        <button id="btn-save-settings" class="btn-primary btn">保存して同期</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Book Detail Modal (Popup Detail Display) -->
+  <div id="book-detail-modal" class="modal-overlay">
+    <div class="modal-content" style="width: 500px;">
+      <div class="modal-header">
+        <h3>書籍詳細情報</h3>
+        <button id="btn-close-detail" class="btn-icon" style="width: 32px; height: 32px;">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="16" height="16">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <div class="book-detail-grid">
+        <img id="detail-cover" src="" alt="Book Cover" class="book-detail-cover">
+        <div class="book-detail-info">
+          <div id="detail-title" class="book-detail-title">書籍タイトル</div>
+          <div id="detail-author" class="book-detail-author">著者名</div>
+          <div class="book-detail-meta">
+            <span id="detail-category" class="meta-pill">カテゴリ: -</span>
+            <span id="detail-release" class="meta-pill">発売日: -</span>
+            <span id="detail-asin" class="meta-pill">ASIN: -</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-actions" style="margin-top: 20px;">
+        <a id="btn-open-booklog" href="" target="_blank" class="btn btn-secondary" style="text-decoration: none; text-align: center;">ブクログで見る</a>
+        <button id="btn-discuss-book" class="btn btn-primary">この本についてAIと話す</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- App Main Logic Script -->
+  <script src="app.js"></script>
+</body>
+</html>
