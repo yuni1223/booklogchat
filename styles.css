@@ -1017,15 +1017,16 @@ body {
   /* Compact controls: Search and Sort horizontally side-by-side */
   .controls-bar {
     display: flex;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     gap: 8px;
     margin-bottom: 8px;
     align-items: center;
   }
 
   .search-wrapper {
-    flex: 1;
-    min-width: 0; /* allows input to shrink safely */
+    flex: 0 0 100%;
+    width: 100%;
+    min-width: 0;
   }
 
   .search-input {
@@ -1045,8 +1046,8 @@ body {
   }
 
   #sort-order {
-    width: 120px !important;
-    padding: 7px 10px !important;
+    width: 110px !important;
+    padding: 7px 8px !important;
     font-size: 11px !important;
     border-radius: var(--radius-sm) !important;
   }
@@ -1056,7 +1057,8 @@ body {
     display: flex;
     flex-wrap: nowrap;
     overflow-x: auto;
-    width: 100%;
+    flex: 1;
+    min-width: 0;
     gap: 6px;
     padding: 4px 2px;
     scrollbar-width: none;
