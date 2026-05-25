@@ -607,70 +607,110 @@ const SPECIAL_VOLUMES = {
   '下': 3, '下巻': 3, '後編': 3, '後': 3
 };
 
-// Parse a book title into base series title and mathematical volume integer
+// Normalize strings to be extremely resilient to space/punctuation/unicode hyphen differences
+function normalizeForComparison(str) {
+  if (!str) return '';
+  let normalized = toHalfWidth(str).toLowerCase();
+  
+  // Standardize all forms of Japanese/English hyphens, dashes and waves to a simple half-width '-'
+  normalized = normalized.replace(/[\u2010-\u2015\u2212\uFF0D\u30FC\u301C\uFF5E]/g, '-');
+  
+  // Strip parentheses and brackets for structural comparison equality
+  normalized = normalized.replace(/[（）()［］\[\]〈〉<>《》]/g, ' ');
+  
+  // Clean up excessive spacing
+  return normalized.replace(/\s+/g, ' ').trim();
+}
+
+// Fallback comparator that prevents "下" sorting before "上", and "後編" before "前編"
+function compareStringsIntelligently(strA, strB) {
+  if (!strA) return strB ? -1 : 0;
+  if (!strB) return 1;
+
+  const mapWords = (str) => {
+    return str
+      .replace(/(上巻|前編|前|上)(?=\b|[\s()（）\[\]］［]|$)/g, '___VOL_1___')
+      .replace(/(中巻|中編|中)(?=\b|[\s()（）\[\]］［]|$)/g, '___VOL_2___')
+      .replace(/(下巻|後編|後|下)(?=\b|[\s()（）\[\]］［]|$)/g, '___VOL_3___');
+  };
+
+  const mappedA = mapWords(strA);
+  const mappedB = mapWords(strB);
+
+  return mappedA.localeCompare(mappedB, 'ja');
+}
+
+// Parse a book title into base series title and mathematical volume integer (multi-pass)
 function parseTitle(title) {
-  if (!title) return { base: '', volume: 0 };
+  if (!title) return { base: '', volume: null, subVolume: null };
   
   let cleanTitle = toHalfWidth(title).trim();
   
   // Strip trailing publisher/meta brackets containing non-digits (e.g. "(新潮文庫)", "（角川文庫）")
-  const trailingParenNonDigitRegex = /[\s(（[［<〈]([^)）\]］>〉]*\D+[^)）\]］>〉]*)[\s)）\]］>〉]$/;
+  // FIXED: Removed space boundary matching at opening bracket to prevent greedy matching on spaced titles like BOOK2
+  const trailingParenNonDigitRegex = /[\(\uff08\[\uff3b<\u3008]([^\)\uff09\]\uff3d>\u3009]*[^\)\uff09\]\uff3d>\u3009\d][^\)\uff09\]\uff3d>\u3009]*)[\s\)\uff09\]\uff3d>\u3009]$/;
   if (cleanTitle.match(trailingParenNonDigitRegex)) {
     cleanTitle = cleanTitle.replace(trailingParenNonDigitRegex, '').trim();
   }
   
-  // 1. Parentheses/brackets containing digits at the end: (10), [8], （５）
-  const parenRegex = /[\s(（[［<〈](\d+)[\s)）\]］>〉]$/;
+  let detectedVolume = null;
+  let detectedSubVolume = null;
+  
+  // 1. Extract numerical volume from parentheses at the end: (1), [2], 〈3〉
+  const parenRegex = /[\s\(\uff08\[\uff3b<\u3008](\d+)[\s\)\uff09\]\uff3d>\u3009]$/;
   const parenMatch = cleanTitle.match(parenRegex);
   if (parenMatch) {
-    const vol = parseInt(parenMatch[1], 10);
-    const base = cleanTitle.replace(parenRegex, '').trim();
-    return { base, volume: vol };
+    detectedVolume = parseInt(parenMatch[1], 10);
+    cleanTitle = cleanTitle.replace(parenRegex, '').trim();
+  } else {
+    // Or trailing digits: "高校事変 10" or "高校事変10"
+    const digitRegex = /(\s+|\b)(\d+)$/;
+    const digitMatch = cleanTitle.match(digitRegex);
+    if (digitMatch) {
+      detectedVolume = parseInt(digitMatch[2], 10);
+      cleanTitle = cleanTitle.replace(digitRegex, '').trim();
+    } else {
+      const endDigitRegex = /(\D+)(\d+)$/;
+      const endDigitMatch = cleanTitle.match(endDigitRegex);
+      if (endDigitMatch) {
+        detectedVolume = parseInt(endDigitMatch[2], 10);
+        cleanTitle = endDigitMatch[1].trim();
+      }
+    }
   }
   
-  // 2. Roman numerals at the end (case-insensitive, optional boundaries): VIII, X, ix
+  // 2. Extract Roman numerals at the end: I, II, III...
   const romanRegex = /\b(I|II|III|IV|V|VI|VII|VIII|IX|X|XI|XII|XIII|XIV|XV|XVI|XVII|XVIII|XIX|XX|XXI|XXII|XXIII|XXIV|XXV|XXVI|XXVII|XXVIII|XXIX|XXX)\b$/i;
   const romanMatch = cleanTitle.match(romanRegex);
   if (romanMatch) {
     const roman = romanMatch[1].toUpperCase();
     const vol = ROMAN_NUMERALS[roman];
     if (vol !== undefined) {
-      const base = cleanTitle.replace(romanRegex, '').trim();
-      return { base, volume: vol };
+      detectedVolume = vol;
+      cleanTitle = cleanTitle.replace(romanRegex, '').trim();
     }
   }
   
-  // 3. Traditional Japanese order suffixes at the end: 上, 中, 下, 前編, 後編
-  const specialRegex = /[\s(（[［<〈]?(上|上巻|前編|前|中|中巻|中編|下|下巻|後編|後)[）)\]］>〉]?$/;
+  // 3. Extract traditional volume indicators: 上, 中, 下, 前編, 後編 etc.
+  const specialRegex = /[\s\(\uff08\[\uff3b<\u3008]?(\u4e0a|\u4e0a\u5dfb|\u524d\u7de8|\u524d|\u4e2d|\u4e2d\u7de8|\u4e2d\u5dfb|\u4e0b|\u4e0b\u5dfb|\u5f8c\u7de8|\u5f8c)[\)\uff09\]\uff3d>\u3009]?$/;
   const specialMatch = cleanTitle.match(specialRegex);
   if (specialMatch) {
     const word = specialMatch[1];
     const vol = SPECIAL_VOLUMES[word];
     if (vol !== undefined) {
-      const base = cleanTitle.replace(specialRegex, '').trim();
-      return { base, volume: vol };
+      detectedSubVolume = vol;
+      cleanTitle = cleanTitle.replace(specialRegex, '').trim();
+      if (detectedVolume === null) {
+        detectedVolume = vol;
+      }
     }
   }
   
-  // 4. Trailing Arabic digits: 高校事変 10 or 高校事変10
-  const digitRegex = /(\s+|\b)(\d+)$/;
-  const digitMatch = cleanTitle.match(digitRegex);
-  if (digitMatch) {
-    const vol = parseInt(digitMatch[2], 10);
-    const base = cleanTitle.replace(digitRegex, '').trim();
-    return { base, volume: vol };
-  }
-
-  // 5. Hard trailing digits without spaces (e.g. 高校事変10 when no boundaries match)
-  const endDigitRegex = /(\D+)(\d+)$/;
-  const endDigitMatch = cleanTitle.match(endDigitRegex);
-  if (endDigitMatch) {
-    const vol = parseInt(endDigitMatch[2], 10);
-    const base = endDigitMatch[1].trim();
-    return { base, volume: vol };
-  }
-  
-  return { base: cleanTitle, volume: null };
+  return {
+    base: cleanTitle,
+    volume: detectedVolume,
+    subVolume: detectedSubVolume
+  };
 }
 
 // Compare two titles naturally (comparing base strings first, then volume numbers)
@@ -678,19 +718,32 @@ function compareTitlesNaturally(titleA, titleB) {
   const parsedA = parseTitle(titleA);
   const parsedB = parseTitle(titleB);
   
-  const baseCompare = parsedA.base.localeCompare(parsedB.base, 'ja');
+  const normA = normalizeForComparison(parsedA.base);
+  const normB = normalizeForComparison(parsedB.base);
+  
+  const baseCompare = normA.localeCompare(normB, 'ja');
   if (baseCompare !== 0) {
-    return titleA.localeCompare(titleB, 'ja');
+    return compareStringsIntelligently(titleA, titleB);
   }
   
+  // 1. Compare primary volume (e.g. numerical volume)
   if (parsedA.volume !== null && parsedB.volume !== null) {
-    return parsedA.volume - parsedB.volume;
+    if (parsedA.volume !== parsedB.volume) {
+      return parsedA.volume - parsedB.volume;
+    }
+  }
+  
+  // 2. Compare sub-volume (e.g. 上/下 inside same volume)
+  if (parsedA.subVolume !== null && parsedB.subVolume !== null) {
+    if (parsedA.subVolume !== parsedB.subVolume) {
+      return parsedA.subVolume - parsedB.subVolume;
+    }
   }
   
   if (parsedA.volume === null && parsedB.volume !== null) return -1;
   if (parsedA.volume !== null && parsedB.volume === null) return 1;
   
-  return titleA.localeCompare(titleB, 'ja');
+  return compareStringsIntelligently(titleA, titleB);
 }
 
 // Dynamic bookshelf sorting utility
