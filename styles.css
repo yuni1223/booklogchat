@@ -926,6 +926,7 @@ body {
     grid-template-columns: 1fr;
     grid-template-rows: auto 1fr;
     height: 100vh;
+    height: 100dvh; /* dynamic viewport height support for modern mobile browser keyboards */
     overflow: hidden;
   }
 
@@ -934,10 +935,10 @@ body {
     display: flex;
     justify-content: space-around;
     align-items: center;
-    background: rgba(15, 17, 26, 0.85);
+    background: rgba(15, 17, 26, 0.9);
     backdrop-filter: blur(16px);
     border-bottom: 1px solid var(--glass-border);
-    padding: 8px 16px;
+    padding: 6px 12px;
     z-index: 100;
   }
 
@@ -980,6 +981,7 @@ body {
   .dashboard-panel, .chat-panel {
     height: 100%;
     width: 100%;
+    min-height: 0; /* CRITICAL: Prevents vertical grid/flex item height overflow */
     overflow: hidden;
     transition: opacity 0.3s ease;
   }
@@ -992,24 +994,240 @@ body {
     display: none !important;
   }
   
+  /* Compact Dashboard margins and padding */
   .dashboard-panel {
-    padding: 16px 16px 24px 16px;
+    padding: 12px 12px 16px 12px;
+  }
+
+  .app-header {
+    margin-bottom: 10px;
+    padding-bottom: 6px;
+  }
+
+  .brand h1 {
+    font-size: 18px;
+  }
+
+  .brand-icon {
+    width: 32px;
+    height: 32px;
+    font-size: 16px;
+  }
+
+  /* Compact controls: Search and Sort horizontally side-by-side */
+  .controls-bar {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 8px;
+    margin-bottom: 8px;
+    align-items: center;
+  }
+
+  .search-wrapper {
+    flex: 1;
+    min-width: 0; /* allows input to shrink safely */
+  }
+
+  .search-input {
+    padding: 8px 12px 8px 34px;
+    font-size: 12px;
+    border-radius: var(--radius-sm);
+  }
+
+  .search-icon {
+    left: 10px;
+    width: 15px;
+    height: 15px;
+  }
+
+  .sort-wrapper {
+    flex-shrink: 0;
+  }
+
+  #sort-order {
+    width: 120px !important;
+    padding: 7px 10px !important;
+    font-size: 11px !important;
+    border-radius: var(--radius-sm) !important;
+  }
+
+  /* Horizontal scrolling chips for Status and Category filters */
+  #status-filters {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    width: 100%;
+    gap: 6px;
+    padding: 4px 2px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    background: transparent;
+    border: none;
+  }
+
+  #status-filters::-webkit-scrollbar {
+    display: none;
+  }
+
+  #status-filters .filter-btn {
+    flex-shrink: 0;
+    padding: 5px 10px;
+    font-size: 11px;
+    border-radius: 16px;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+  }
+
+  #status-filters .filter-btn.active {
+    background: var(--accent-indigo);
+    border-color: var(--accent-indigo);
+    color: var(--text-primary);
+  }
+
+  /* Category Filter Scrollable bar spacing */
+  section.controls-bar[style*="margin-top: -12px"] {
+    margin-top: -4px !important;
+    margin-bottom: 12px !important;
+  }
+
+  #category-filters {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    width: 100%;
+    gap: 6px;
+    padding: 2px 2px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  #category-filters::-webkit-scrollbar {
+    display: none;
+  }
+
+  #category-filters .filter-btn {
+    flex-shrink: 0;
+    padding: 5px 10px;
+    font-size: 11px;
+    border-radius: 16px;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+  }
+
+  #category-filters .filter-btn.active {
+    background: var(--accent-indigo);
+    border-color: var(--accent-indigo);
+    color: var(--text-primary);
+  }
+
+  /* Premium Multi-column Book grid optimized for covers visibility */
+  .bookshelf-container {
+    padding-right: 0px;
+  }
+
+  .books-grid {
+    grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+    gap: 10px;
+    padding-bottom: 16px;
+  }
+
+  .book-card {
+    padding: 6px;
+    border-radius: var(--radius-sm);
+  }
+
+  .book-cover-container {
+    margin-bottom: 6px;
+  }
+
+  .book-title {
+    font-size: 11px;
+    height: 32px;
+    line-height: 1.3;
+    margin-bottom: 2px;
+  }
+
+  .book-author {
+    font-size: 9px;
+    margin-bottom: 4px;
+  }
+
+  .book-badge {
+    font-size: 8px;
+    padding: 1px 6px;
   }
 
   /* Chat panel spacing adjustments for mobile screens */
   .chat-panel {
     border-left: none;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0; /* CRITICAL: Allows inner messages flex to shrink */
   }
 
   .chat-header {
-    padding: 12px 16px;
+    padding: 10px 14px;
+  }
+
+  .chat-header h2 {
+    font-size: 14px;
   }
 
   .chat-messages {
-    padding: 16px;
+    padding: 12px;
+    gap: 12px;
+    flex: 1;
+    min-height: 0; /* CRITICAL: Enables message box custom scrolling */
+    overflow-y: auto;
   }
 
+  .message {
+    max-width: 90%;
+  }
+
+  .message-content {
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+
+  /* Chat Input footer perfectly docked to the bottom */
   .chat-footer {
-    padding: 12px 16px;
+    padding: 8px 12px;
+    gap: 8px;
+    background: rgba(15, 17, 26, 0.95);
+    border-top: 1px solid var(--glass-border);
+    flex-shrink: 0; /* CRITICAL: Input footer will never be squeezed off-screen */
+  }
+
+  .chat-suggestions {
+    gap: 6px;
+    padding-bottom: 2px;
+  }
+
+  .suggestion-chip {
+    padding: 4px 10px;
+    font-size: 10px;
+  }
+
+  .chat-input-wrapper {
+    gap: 8px;
+  }
+
+  .chat-input {
+    padding: 10px 14px;
+    font-size: 13px;
+    height: 38px;
+    border-radius: 20px;
+  }
+
+  .send-btn {
+    width: 36px;
+    height: 36px;
+  }
+
+  .send-btn svg {
+    width: 16px;
+    height: 16px;
   }
 }
