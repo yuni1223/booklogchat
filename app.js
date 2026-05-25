@@ -266,7 +266,17 @@ async function fetchBooklogData() {
             title: book.title || '無題',
             author: cleanAuthorName(book.author || '著者不明'),
             image: coverImage,
-            category: book.catalog || 'その他',
+            category: (() => {
+              let cat = book.catalog || 'その他';
+              if (cat.toLowerCase() === 'book') {
+                const titleUpper = (book.title || '').toUpperCase();
+                const isShinsho = titleUpper.includes('新書') || titleUpper.includes('選書');
+                if (isShinsho) return 'shinsho';
+                const isNovel = titleUpper.includes('文庫') || titleUpper.includes('小説') || titleUpper.includes('選集');
+                if (isNovel) return 'novel';
+              }
+              return cat;
+            })(),
             release: book.release || '不明',
             publisher: '不明', // will be enriched
             asin: asin,
@@ -383,6 +393,19 @@ async function enrichBookMetadata() {
           }
           if (publisher && publisher !== '不明') {
             matchedBook.publisher = publisher;
+            
+            // Refine category dynamically using enriched publisher and title metadata
+            const catLower = (matchedBook.category || '').toLowerCase();
+            if (catLower === 'book' || catLower === 'general' || catLower === 'novel' || catLower === 'shinsho' || catLower === '一般書') {
+              const pubUpper = publisher.toUpperCase();
+              const titleUpper = (matchedBook.title || '').toUpperCase();
+              
+              if (pubUpper.includes('新書') || pubUpper.includes('選書') || titleUpper.includes('新書') || titleUpper.includes('選書')) {
+                matchedBook.category = 'shinsho';
+              } else if (pubUpper.includes('文庫') || pubUpper.includes('集書') || titleUpper.includes('文庫') || titleUpper.includes('小説')) {
+                matchedBook.category = 'novel';
+              }
+            }
           }
           // If OpenBD has a high-res cover image, use it!
           if (cover) {
@@ -526,6 +549,8 @@ function translateCategory(cat) {
   const mapping = {
     'all': 'すべて',
     'book': '一般書',
+    'novel': '小説',
+    'shinsho': '新書',
     'comic': 'コミック',
     'dvd': 'DVD/映画',
     'cd': 'CD/音楽',
