@@ -276,8 +276,10 @@ async function fetchBooklogData() {
                 if (isShinsho) return 'shinsho';
                 
                 // 2. Novel (物語文) Check
-                const hasNovelKeyword = titleUpper.includes('文庫') || titleUpper.includes('小説') || titleUpper.includes('選集');
-                const nonFictionKeywords = ['論', '学', '史', '入門', 'わかる', '解説', '講義', '科学', '経済', '政治', '教養', '技術', '基礎', '雑学', '不思議', '興奮', '仕事', '自己啓発', '図鑑'];
+                const hasNovelKeyword = titleUpper.includes('文庫') || titleUpper.includes('小説') || titleUpper.includes('選集') || titleUpper.includes('ミステリ') || titleUpper.includes('推理');
+                
+                // Avoid single-character greedy keywords like '学' or '論' matching '数学', '文学', '論理'
+                const nonFictionKeywords = ['論文', '概論', '総論', '原論', '各論', '資本論', '評論', '論稿', '科学', '哲学', '経済学', '政治学', '社会学', '心理学', '言語学', '物理学', '地学', '医学', '人文学', '神学', '法学', '理学', '工学', '農学', '統計学', '歴史学', '世界史', '日本史', '東洋史', '西洋史', '近代史', '現代史', '古代史', '歴史', '入門', 'わかる', '解説', '講義', '教養', '基礎', '技術', '図鑑', 'ビジネス', '仕事', '自己啓発', '実践', 'マーケティング', 'デザイン', '雑学', '不思議', '興奮'];
                 const hasNonFictionTitle = nonFictionKeywords.some(kw => titleUpper.includes(kw));
                 
                 if (hasNovelKeyword && !hasNonFictionTitle) {
@@ -467,33 +469,40 @@ async function enrichBookMetadata() {
                 if (hasShinshoKeyword) {
                   matchedBook.category = 'shinsho';
                 } else {
-                  // Common non-fiction/academic/trivia keywords in titles, publishers or series
-                  const nonFictionKeywords = ['論', '学', '史', '入門', 'わかる', '解説', '講義', '科学', '経済', '政治', '教養', '技術', '基礎', '図鑑', '新書', 'ビジネス', '仕事', '自己啓発', '実践', 'マーケティング', 'デザイン', '雑学', '不思議', '興奮', '解説'];
+                  // Common non-fiction/academic/trivia keywords (Avoid greedy single-character matches like '学', '論', '史')
+                  const nonFictionKeywords = ['論文', '概論', '総論', '原論', '各論', '資本論', '評論', '論稿', '科学', '哲学', '経済学', '政治学', '社会学', '心理学', '言語学', '物理学', '地学', '医学', '人文学', '神学', '法学', '理学', '工学', '農学', '統計学', '歴史学', '世界史', '日本史', '東洋史', '西洋史', '近代史', '現代史', '古代史', '歴史', '入門', 'わかる', '解説', '講義', '教養', '基礎', '技術', '図鑑', 'ビジネス', '仕事', '自己啓発', '実践', 'マーケティング', 'デザイン', '雑学', '不思議', '興奮', '教科書', '問題集', '学習'];
+                  
+                  // Specific non-fiction series
                   const nonFictionSeries = ['学芸文庫', 'ソフィア文庫', '学術文庫', 'NF文庫', 'NF'];
                   const nonFictionAuthors = ['池上彰', '内田樹', '新井紀子', '吉本隆明', '加藤諦三', '岸見一郎'];
                   
-                  const isNonFictionSeries = nonFictionSeries.some(s => seriesUpper.includes(s));
+                  const isNonFictionSeries = nonFictionSeries.some(s => seriesUpper.includes(s) || pubUpper.includes(s));
                   const hasNonFictionTitle = nonFictionKeywords.some(kw => titleUpper.includes(kw));
                   const isNonFictionAuthor = nonFictionAuthors.some(auth => authorUpper.includes(auth));
                   
                   const isNonFiction = isNonFictionSeries || hasNonFictionTitle || isNonFictionAuthor;
                   
-                  // Known novelists list to guarantee correct categorization
-                  const novelists = ['辻村深月', '村上春樹', '東野圭吾', '伊坂幸太郎', '宮部みゆき', '湊かなえ', '有川浩', '朝井リョウ', '住野よる', '米澤穂信', '西尾西', '西尾維新', '綾辻行人', '新海誠', '知念実希人', '瀬尾まいこ', '重松清', '小野不由美', '宮下奈都', '三浦しをん', '池井戸潤', '川村元気', '誉田哲也', '星新一', '太宰治', '夏川草介', '原田マハ', '森見ド美彦', '森見登美彦', '万城目学', '中村文則', '又吉直樹', '薬丸岳', '横山秀夫'];
+                  // Expanded list of known fiction novelists (including classical & modern ones to cover classic paperbacks)
+                  const novelists = [
+                    '中島敦', '太宰治', '芥川龍之介', '夏目漱石', '森鴎外', '川端康成', '三島由紀夫', '梶井基次郎', '江戸川乱歩', '坂口安吾', '有島武郎', '芥川竜之介',
+                    '辻村深月', '村上春樹', '東野圭吾', '伊坂幸太郎', '宮部みゆき', '湊かなえ', '有川浩', '朝井リョウ', '住野よる', '米澤穂信', '西尾西', '西尾維新', '綾辻行人', '新海誠', '知念実希人', '瀬尾まいこ', '重松清', '小野不由美', '宮下奈都', '三浦しをん', '池井戸潤', '川村元気', '誉田哲也', '星新一', '太宰治', '夏川草介', '原田マハ', '森見ド美彦', '森見登美彦', '万城目学', '中村文則', '又吉直樹', '薬丸岳', '横山秀夫', 
+                    '野村美月', '古野まほろ', '佐藤青南', '陸秋秋', '有栖川有栖', '北村薫', '恩田陸', '恒川光太郎', '貴志祐介', '我孫子武丸', '歌野晶午', '麻耶雄嵩', '法月綸太郎', '小野不由美'
+                  ];
                   const isKnownNovelist = novelists.some(auth => authorUpper.includes(auth.toUpperCase()));
                   
-                  // Major literary publishers that publish hardcover novels
-                  const literaryPublishers = ['新潮社', '講談社', '集英社', '文藝春秋', '幻冬舎', 'ポプラ社', '双葉社', '角川', 'KADOKAWA', '徳間書店', '光文社', '早川書房', '東京創元社', '文春', '実業之日本社', 'ポプラ文庫'];
-                  const isLiteraryPublisher = literaryPublishers.some(pub => pubUpper.includes(pub));
+                  // Standard fiction bunko imprint matching (contains '文庫', 'ミステリ', '推理' and is not non-fiction)
+                  const isFictionSeries = seriesUpper.includes('文庫') || seriesUpper.includes('ミステリ') || seriesUpper.includes('推理') || pubUpper.includes('文庫') || titleUpper.includes('文庫');
                   
-                  const hasBunkoKeyword = pubUpper.includes('文庫') || pubUpper.includes('集書') || titleUpper.includes('文庫') || seriesUpper.includes('文庫') || titleUpper.includes('小説');
+                  // Major literary publishers that publish hardcover novels
+                  const literaryPublishers = ['新潮社', '講談社', '集英社', '文藝春秋', '幻冬舎', 'ポプラ社', '双葉社', '角川', 'KADOKAWA', '徳間書店', '光文社', '早川書房', '東京創元社', '文春', '実業之日本社', 'ポプラ文庫', '宝島社'];
+                  const isLiteraryPublisher = literaryPublishers.some(pub => pubUpper.includes(pub));
                   
                   if (isKnownNovelist) {
                     matchedBook.category = 'novel';
-                  } else if (hasBunkoKeyword && !isNonFiction) {
-                    matchedBook.category = 'novel';
-                  } else if (isLiteraryPublisher && !isNonFiction) {
-                    matchedBook.category = 'novel';
+                  } else if (isFictionSeries && !isNonFictionSeries && !isNonFiction) {
+                    matchedBook.category = 'novel'; // Standard fiction bunko (like '文学少女', '青の数学', 'i')
+                  } else if (isLiteraryPublisher && !isNonFiction && !isNonFictionSeries) {
+                    matchedBook.category = 'novel'; // Standard fiction hardcover
                   } else {
                     matchedBook.category = 'book'; // Default to 一般書
                   }
