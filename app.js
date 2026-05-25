@@ -9,7 +9,7 @@ const state = {
   books: [],
   filteredBooks: [],
   selectedCategory: 'all',
-  selectedStatus: 'all', // status filter (読んだ本, 読みたい本, 積読, etc.)
+  selectedStatus: '読んだ本', // status filter (読んだ本, 読みたい本, 積読, etc.)
   currentSortRule: 'publisher', // default sorting rule: 出版社順
   searchQuery: '',
   chatHistory: [
