@@ -270,9 +270,22 @@ async function fetchBooklogData() {
               let cat = book.catalog || 'その他';
               if (cat.toLowerCase() === 'book') {
                 const titleUpper = (book.title || '').toUpperCase();
+                
+                // 1. Shinsho Check
                 const isShinsho = titleUpper.includes('新書') || titleUpper.includes('選書');
                 if (isShinsho) return 'shinsho';
-                return 'novel'; // Default all other printed books to novel (小説)
+                
+                // 2. Novel (物語文) Check
+                const hasNovelKeyword = titleUpper.includes('文庫') || titleUpper.includes('小説') || titleUpper.includes('選集');
+                const nonFictionKeywords = ['論', '学', '史', '入門', 'わかる', '解説', '講義', '科学', '経済', '政治', '教養', '技術', '基礎', '雑学', '不思議', '興奮', '仕事', '自己啓発', '図鑑'];
+                const hasNonFictionTitle = nonFictionKeywords.some(kw => titleUpper.includes(kw));
+                
+                if (hasNovelKeyword && !hasNonFictionTitle) {
+                  return 'novel';
+                }
+                
+                // 3. Default general non-fiction book
+                return 'book';
               }
               return cat;
             })(),
@@ -431,8 +444,10 @@ async function enrichBookMetadata() {
                     matchedBook.category = 'comic';
                   } else if (formatDigit === '2') {
                     matchedBook.category = 'shinsho';
+                  } else if (genreNum >= 90 && genreNum <= 98) {
+                    matchedBook.category = 'novel'; // Literature / Stories -> 小説
                   } else {
-                    matchedBook.category = 'novel'; // Default all other printed books to novel (小説)
+                    matchedBook.category = 'book'; // Non-fiction, essays, academic -> 一般書
                   }
                   
                   console.log(`C-Code based categorization for "${matchedBook.title}": ${cCode} -> ${matchedBook.category}`);
@@ -445,13 +460,43 @@ async function enrichBookMetadata() {
                 const pubUpper = publisher.toUpperCase();
                 const titleUpper = (matchedBook.title || '').toUpperCase();
                 const seriesUpper = (item.summary?.series || '').toUpperCase();
+                const authorUpper = (matchedBook.author || '').toUpperCase();
                 
                 const hasShinshoKeyword = pubUpper.includes('新書') || pubUpper.includes('選書') || titleUpper.includes('新書') || titleUpper.includes('選書') || seriesUpper.includes('新書') || seriesUpper.includes('選書');
                 
                 if (hasShinshoKeyword) {
                   matchedBook.category = 'shinsho';
                 } else {
-                  matchedBook.category = 'novel'; // Default all other printed books fallback to novel (小説)
+                  // Common non-fiction/academic/trivia keywords in titles, publishers or series
+                  const nonFictionKeywords = ['論', '学', '史', '入門', 'わかる', '解説', '講義', '科学', '経済', '政治', '教養', '技術', '基礎', '図鑑', '新書', 'ビジネス', '仕事', '自己啓発', '実践', 'マーケティング', 'デザイン', '雑学', '不思議', '興奮', '解説'];
+                  const nonFictionSeries = ['学芸文庫', 'ソフィア文庫', '学術文庫', 'NF文庫', 'NF'];
+                  const nonFictionAuthors = ['池上彰', '内田樹', '新井紀子', '吉本隆明', '加藤諦三', '岸見一郎'];
+                  
+                  const isNonFictionSeries = nonFictionSeries.some(s => seriesUpper.includes(s));
+                  const hasNonFictionTitle = nonFictionKeywords.some(kw => titleUpper.includes(kw));
+                  const isNonFictionAuthor = nonFictionAuthors.some(auth => authorUpper.includes(auth));
+                  
+                  const isNonFiction = isNonFictionSeries || hasNonFictionTitle || isNonFictionAuthor;
+                  
+                  // Known novelists list to guarantee correct categorization
+                  const novelists = ['辻村深月', '村上春樹', '東野圭吾', '伊坂幸太郎', '宮部みゆき', '湊かなえ', '有川浩', '朝井リョウ', '住野よる', '米澤穂信', '西尾西', '西尾維新', '綾辻行人', '新海誠', '知念実希人', '瀬尾まいこ', '重松清', '小野不由美', '宮下奈都', '三浦しをん', '池井戸潤', '川村元気', '誉田哲也', '星新一', '太宰治', '夏川草介', '原田マハ', '森見ド美彦', '森見登美彦', '万城目学', '中村文則', '又吉直樹', '薬丸岳', '横山秀夫'];
+                  const isKnownNovelist = novelists.some(auth => authorUpper.includes(auth.toUpperCase()));
+                  
+                  // Major literary publishers that publish hardcover novels
+                  const literaryPublishers = ['新潮社', '講談社', '集英社', '文藝春秋', '幻冬舎', 'ポプラ社', '双葉社', '角川', 'KADOKAWA', '徳間書店', '光文社', '早川書房', '東京創元社', '文春', '実業之日本社', 'ポプラ文庫'];
+                  const isLiteraryPublisher = literaryPublishers.some(pub => pubUpper.includes(pub));
+                  
+                  const hasBunkoKeyword = pubUpper.includes('文庫') || pubUpper.includes('集書') || titleUpper.includes('文庫') || seriesUpper.includes('文庫') || titleUpper.includes('小説');
+                  
+                  if (isKnownNovelist) {
+                    matchedBook.category = 'novel';
+                  } else if (hasBunkoKeyword && !isNonFiction) {
+                    matchedBook.category = 'novel';
+                  } else if (isLiteraryPublisher && !isNonFiction) {
+                    matchedBook.category = 'novel';
+                  } else {
+                    matchedBook.category = 'book'; // Default to 一般書
+                  }
                 }
               }
             }
@@ -623,7 +668,7 @@ function renderCategoryFilters() {
 function translateCategory(cat) {
   const mapping = {
     'all': 'すべて',
-    'book': '単行本',
+    'book': '一般書',
     'novel': '小説',
     'shinsho': '新書',
     'comic': 'コミック',
