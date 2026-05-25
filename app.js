@@ -8,7 +8,7 @@ const state = {
   geminiKey: localStorage.getItem('gemini_api_key') || '',
   books: [],
   filteredBooks: [],
-  selectedCategory: 'all',
+  selectedCategory: 'novel',
   selectedStatus: '読んだ本', // status filter (読んだ本, 読みたい本, 積読, etc.)
   currentSortRule: 'publisher', // default sorting rule: 出版社順
   searchQuery: '',
@@ -273,7 +273,14 @@ async function fetchBooklogData() {
                 const isShinsho = titleUpper.includes('新書') || titleUpper.includes('選書');
                 if (isShinsho) return 'shinsho';
                 const isNovel = titleUpper.includes('文庫') || titleUpper.includes('小説') || titleUpper.includes('選集');
-                if (isNovel) return 'novel';
+                if (isNovel) {
+                  const nonFictionKeywords = ['論', '学', '史', '入門', 'わかる', '解説', '講義', '科学', '経済', '政治', '教養', '技術', '基礎'];
+                  const isNonFictionTitle = nonFictionKeywords.some(kw => titleUpper.includes(kw));
+                  if (isNonFictionTitle) {
+                    return 'book'; // Group in general / 単行本・その他
+                  }
+                  return 'novel';
+                }
               }
               return cat;
             })(),
@@ -331,6 +338,26 @@ function convertISBN10to13(isbn10) {
   }
   const check = (10 - (sum % 10)) % 10;
   return base + check;
+}
+
+// Extract C-Code (Japanese standard classification book code) from OpenBD item
+function extractCCode(item) {
+  if (!item) return null;
+  if (item.hanmoto && item.hanmoto.c_code) {
+    return String(item.hanmoto.c_code).trim();
+  }
+  if (item.onix?.DescriptiveDetail?.Subject) {
+    const subjects = item.onix.DescriptiveDetail.Subject;
+    const subjectList = Array.isArray(subjects) ? subjects : [subjects];
+    for (const subj of subjectList) {
+      if (subj?.SubjectSchemeIdentifier === '78' || subj?.SubjectSchemeIdentifier === '79') {
+        if (subj.SubjectCode) {
+          return String(subj.SubjectCode).trim();
+        }
+      }
+    }
+  }
+  return null;
 }
 
 // Batch enrich book authors and publish dates using OpenBD API
@@ -394,16 +421,65 @@ async function enrichBookMetadata() {
           if (publisher && publisher !== '不明') {
             matchedBook.publisher = publisher;
             
-            // Refine category dynamically using enriched publisher and title metadata
+            // Refine category dynamically using enriched publisher, title, and C-Code metadata
             const catLower = (matchedBook.category || '').toLowerCase();
-            if (catLower === 'book' || catLower === 'general' || catLower === 'novel' || catLower === 'shinsho' || catLower === '一般書') {
-              const pubUpper = publisher.toUpperCase();
-              const titleUpper = (matchedBook.title || '').toUpperCase();
+            if (catLower === 'book' || catLower === 'general' || catLower === 'novel' || catLower === 'shinsho' || catLower === '一般書' || catLower === '単行本・その他') {
               
-              if (pubUpper.includes('新書') || pubUpper.includes('選書') || titleUpper.includes('新書') || titleUpper.includes('選書')) {
-                matchedBook.category = 'shinsho';
-              } else if (pubUpper.includes('文庫') || pubUpper.includes('集書') || titleUpper.includes('文庫') || titleUpper.includes('小説')) {
-                matchedBook.category = 'novel';
+              // 1. Try to extract C-Code first (Gold standard)
+              let cCode = extractCCode(item);
+              let classifiedViaCCode = false;
+              if (cCode) {
+                cCode = cCode.replace(/^C/i, ''); // Strip leading C if present
+                if (cCode.length === 4) {
+                  const formatDigit = cCode[1];
+                  const genreCode = cCode.substring(2);
+                  const genreNum = parseInt(genreCode, 10);
+                  
+                  if (formatDigit === '9' || genreNum === 79) {
+                    matchedBook.category = 'comic';
+                  } else if (formatDigit === '2') {
+                    matchedBook.category = 'shinsho';
+                  } else if (genreNum >= 90 && genreNum <= 98) {
+                    matchedBook.category = 'novel';
+                  } else {
+                    matchedBook.category = 'book'; // Non-fiction bunko or general hardcover/etc. -> 単行本・その他
+                  }
+                  
+                  console.log(`C-Code based categorization for "${matchedBook.title}": ${cCode} -> ${matchedBook.category}`);
+                  classifiedViaCCode = true;
+                }
+              }
+              
+              // 2. Heuristic fallback (If C-code is not available or invalid)
+              if (!classifiedViaCCode) {
+                const pubUpper = publisher.toUpperCase();
+                const titleUpper = (matchedBook.title || '').toUpperCase();
+                const seriesUpper = (item.summary?.series || '').toUpperCase();
+                
+                const hasShinshoKeyword = pubUpper.includes('新書') || pubUpper.includes('選書') || titleUpper.includes('新書') || titleUpper.includes('選書') || seriesUpper.includes('新書') || seriesUpper.includes('選書');
+                const hasBunkoKeyword = pubUpper.includes('文庫') || pubUpper.includes('集書') || titleUpper.includes('文庫') || seriesUpper.includes('文庫') || titleUpper.includes('小説');
+                
+                if (hasShinshoKeyword) {
+                  matchedBook.category = 'shinsho';
+                } else if (hasBunkoKeyword) {
+                  // Determine if this Bunko/book is non-fiction
+                  const nonFictionKeywords = ['論', '学', '史', '入門', 'わかる', '解説', '講義', '科学', '経済', '政治', '教養', '技術', '基礎', '図鑑', '新書'];
+                  const nonFictionSeries = ['学芸文庫', 'ソフィア文庫', '学術文庫', 'NF文庫', 'NF'];
+                  
+                  const isNonFictionSeries = nonFictionSeries.some(s => seriesUpper.includes(s));
+                  const hasNonFictionTitle = nonFictionKeywords.some(kw => titleUpper.includes(kw));
+                  
+                  // Author-based check (e.g. academic / commentator authors writing non-fiction in bunko)
+                  const authorUpper = (matchedBook.author || '').toUpperCase();
+                  const nonFictionAuthors = ['池上彰', '内田樹', '新井紀子', '吉本隆明', '加藤諦三', '岸見一郎'];
+                  const isNonFictionAuthor = nonFictionAuthors.some(auth => authorUpper.includes(auth));
+                  
+                  if (isNonFictionSeries || hasNonFictionTitle || isNonFictionAuthor) {
+                    matchedBook.category = 'book'; // Non-fiction bunko -> 単行本・その他
+                  } else {
+                    matchedBook.category = 'novel';
+                  }
+                }
               }
             }
           }
@@ -524,17 +600,33 @@ function renderBookshelf() {
 
 // Generate category selection buttons based on bookshelf contents
 function renderCategoryFilters() {
-  const categories = ['all', ...new Set(state.books.map(b => b.category))];
+  const categories = [...new Set(state.books.map(b => b.category))];
+  
+  if (categories.length === 0) {
+    elements.categoryFilters.innerHTML = '';
+    return;
+  }
+
+  // Graceful fallback logic for selectedCategory when 'all' is removed or active category is missing
+  if (state.selectedCategory === 'all' || !categories.includes(state.selectedCategory)) {
+    if (categories.includes('novel')) {
+      state.selectedCategory = 'novel';
+    } else {
+      state.selectedCategory = categories[0];
+    }
+  }
+
   elements.categoryFilters.innerHTML = '';
 
   categories.forEach(cat => {
     const btn = document.createElement('button');
     btn.className = `filter-btn ${state.selectedCategory === cat ? 'active' : ''}`;
-    btn.textContent = cat === 'all' ? 'すべて' : translateCategory(cat);
+    btn.textContent = translateCategory(cat);
     btn.dataset.category = cat;
 
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      // Fix: Scoped ONLY to category filter buttons to prevent clearing status filters active classes
+      document.querySelectorAll('#category-filters .filter-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       state.selectedCategory = cat;
       filterAndRenderBooks();
@@ -548,7 +640,7 @@ function renderCategoryFilters() {
 function translateCategory(cat) {
   const mapping = {
     'all': 'すべて',
-    'book': '一般書',
+    'book': '単行本・その他',
     'novel': '小説',
     'shinsho': '新書',
     'comic': 'コミック',
