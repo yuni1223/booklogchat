@@ -290,10 +290,8 @@ async function fetchBooklogData() {
     
     // Sort initially by default order (publisher)
     state.books = sortBooks(state.books, state.currentSortRule);
-    state.filteredBooks = [...state.books];
-    
     elements.chatStatus.textContent = `${state.books.length}冊の本棚データを認識`;
-    renderBookshelf();
+    filterAndRenderBooks();
     renderCategoryFilters();
 
     // Enrich with OpenBD in background to populate author/release/publisher metadata
