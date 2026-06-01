@@ -197,9 +197,9 @@
 
   <!-- Book Detail Modal (Popup Detail Display) -->
   <div id="book-detail-modal" class="modal-overlay">
-    <div class="modal-content" id="detail-modal-content">
+    <div class="modal-content">
       <div class="modal-header">
-        <h3 id="modal-title-display">書籍詳細情報</h3>
+        <h3>書籍詳細情報</h3>
         <button id="btn-close-detail" class="btn-icon" style="width: 32px; height: 32px;">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="16" height="16">
             <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
@@ -207,72 +207,26 @@
         </button>
       </div>
 
-      <!-- PANEL 1: Standard Book Details View -->
-      <div id="book-detail-info-view">
-        <div class="book-detail-grid">
-          <img id="detail-cover" src="" alt="Book Cover" class="book-detail-cover">
-          <div class="book-detail-info">
-            <div id="detail-title" class="book-detail-title">書籍タイトル</div>
-            <div id="detail-author" class="book-detail-author">著者名</div>
-            <div class="book-detail-meta">
-              <span id="detail-category" class="meta-pill">カテゴリ: -</span>
-              <span id="detail-release" class="meta-pill">発売日: -</span>
-              <span id="detail-publisher" class="meta-pill">出版社: -</span>
-              <span id="detail-asin" class="meta-pill">ASIN: -</span>
-            </div>
+      <div class="book-detail-grid">
+        <img id="detail-cover" src="" alt="Book Cover" class="book-detail-cover">
+        <div class="book-detail-info">
+          <div id="detail-title" class="book-detail-title">書籍タイトル</div>
+          <div id="detail-author" class="book-detail-author">著者名</div>
+          <div class="book-detail-meta">
+            <span id="detail-category" class="meta-pill">カテゴリ: -</span>
+            <span id="detail-release" class="meta-pill">発売日: -</span>
+            <span id="detail-publisher" class="meta-pill">出版社: -</span>
+            <span id="detail-asin" class="meta-pill">ASIN: -</span>
           </div>
-        </div>
-
-        <div class="modal-actions" style="margin-top: 24px; display: flex; gap: 12px; flex-wrap: wrap;">
-          <a id="btn-open-booklog" href="" target="_blank" class="btn btn-secondary" style="text-decoration: none; text-align: center; flex: 1; min-width: 120px;">ブクログで見る</a>
-          <button id="btn-discuss-book" class="btn btn-secondary" style="flex: 1.2; min-width: 150px;">💬 AIとチャットする</button>
-          <button id="btn-analyze-structure" class="btn btn-primary" style="flex: 1.5; min-width: 180px;">📊 物語構造を分析する</button>
         </div>
       </div>
 
-      <!-- PANEL 2: Narrative Structure Analysis View -->
-      <div id="book-detail-analysis-view" style="display: none;">
-        <!-- Top Toolbar with Export Actions -->
-        <div class="analysis-toolbar">
-          <button id="btn-analysis-back" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px; display: flex; align-items: center; gap: 4px;">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="12" height="12">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
-            </svg>
-            戻る
-          </button>
-          <div style="display: flex; gap: 8px; margin-left: auto;">
-            <button id="btn-analysis-copy" class="btn-export btn-export-copy" title="NotebookLM用にコピーします">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="14" height="14">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H5.25m11.9-3.664A2.251 2.251 0 0 0 15 2.25h-3a2.251 2.251 0 0 0-2.15 1.586m5.8 0c.065.21.1.433.1.664v.75h-6V4.5c0-.231.035-.454.1-.664M6.75 7.5H4.875c-.621 0-1.125.504-1.125 1.125v12c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V16.5m-3.75-3h1.5m-1.5-3h1.5m-1.5-3h1.5" />
-              </svg>
-              <span>NotebookLM用にコピー</span>
-            </button>
-            <button id="btn-analysis-download" class="btn-export btn-export-download" title="Googleドライブ自動同期フォルダ等に保存します">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="14" height="14">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
-              </svg>
-              <span>同期フォルダへ保存 (.md)</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- Skeleton Loading Wave Panel -->
-        <div id="analysis-skeleton-loader" class="skeleton-loader-panel">
-          <div class="skeleton-line skeleton-title"></div>
-          <div class="skeleton-line skeleton-header"></div>
-          <div class="skeleton-line skeleton-text-short"></div>
-          <div class="skeleton-line skeleton-text"></div>
-          <div class="skeleton-line skeleton-text-medium"></div>
-          <div class="skeleton-line skeleton-header"></div>
-          <div class="skeleton-line skeleton-text"></div>
-          <div class="skeleton-line skeleton-text-short"></div>
-        </div>
-
-        <!-- Rendered Report Markdown Content Container -->
-        <div id="analysis-report-container" class="analysis-report-container" style="display: none;">
-          <article id="analysis-report-content" class="analysis-report-markdown prose"></article>
-        </div>
+      <div class="modal-actions" style="margin-top: 24px; display: flex; gap: 12px; flex-wrap: wrap;">
+        <a id="btn-open-booklog" href="" target="_blank" class="btn btn-secondary" style="text-decoration: none; text-align: center; flex: 1; min-width: 120px;">ブクログで見る</a>
+        <button id="btn-discuss-book" class="btn btn-primary" style="flex: 1.2; min-width: 150px;">💬 AIとチャットする</button>
       </div>
+    </div>
+  </div>
     </div>
   </div>
 
