@@ -85,20 +85,7 @@ const elements = {
   detailAsin: document.getElementById('detail-asin'),
   btnOpenBooklog: document.getElementById('btn-open-booklog'),
   btnDiscussBook: document.getElementById('btn-discuss-book'),
-  btnCloseDetail: document.getElementById('btn-close-detail'),
-  
-  // Dedicated Analyzer Elements
-  detailModalContent: document.getElementById('detail-modal-content'),
-  bookDetailInfoView: document.getElementById('book-detail-info-view'),
-  bookDetailAnalysisView: document.getElementById('book-detail-analysis-view'),
-  btnAnalyzeStructure: document.getElementById('btn-analyze-structure'),
-  btnAnalysisBack: document.getElementById('btn-analysis-back'),
-  btnAnalysisCopy: document.getElementById('btn-analysis-copy'),
-  btnAnalysisDownload: document.getElementById('btn-analysis-download'),
-  analysisSkeletonLoader: document.getElementById('analysis-skeleton-loader'),
-  analysisReportContainer: document.getElementById('analysis-report-container'),
-  analysisReportContent: document.getElementById('analysis-report-content'),
-  modalTitleDisplay: document.getElementById('modal-title-display')
+  btnCloseDetail: document.getElementById('btn-close-detail')
 };
 
 // Initialize Application
@@ -189,62 +176,7 @@ function setupEventListeners() {
   // Clear Chat history
   elements.btnClearChat.addEventListener('click', clearChatHistory);
 
-  // Story Analyzer Event Listeners (with defensive checks for cache/version mismatches)
-  if (elements.btnAnalyzeStructure) {
-    elements.btnAnalyzeStructure.addEventListener('click', () => {
-      if (detailModalActiveBook) {
-        startStoryStructureAnalysis(detailModalActiveBook);
-      }
-    });
-  }
 
-  if (elements.btnAnalysisBack) {
-    elements.btnAnalysisBack.addEventListener('click', switchBackToDetails);
-  }
-
-  if (elements.btnAnalysisCopy) {
-    elements.btnAnalysisCopy.addEventListener('click', () => {
-      if (analysisReportRawText) {
-        navigator.clipboard.writeText(analysisReportRawText).then(() => {
-          elements.btnAnalysisCopy.classList.add('success');
-          const spanEl = elements.btnAnalysisCopy.querySelector('span');
-          const originalText = spanEl.textContent;
-          spanEl.textContent = 'コピー完了！';
-          setTimeout(() => {
-            elements.btnAnalysisCopy.classList.remove('success');
-            spanEl.textContent = originalText;
-          }, 2000);
-        }).catch(err => {
-          console.error('コピー失敗:', err);
-        });
-      }
-    });
-  }
-
-  if (elements.btnAnalysisDownload) {
-    elements.btnAnalysisDownload.addEventListener('click', () => {
-      if (analysisReportRawText && detailModalActiveBook) {
-        const blob = new Blob([analysisReportRawText], { type: 'text/markdown;charset=utf-8;' });
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        const safeTitle = detailModalActiveBook.title.replace(/[\\/:*?"<>|]/g, '_');
-        link.download = `${safeTitle}_物語構造分析.md`;
-        link.style.display = 'none';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-
-        elements.btnAnalysisDownload.classList.add('success');
-        const spanEl = elements.btnAnalysisDownload.querySelector('span');
-        const originalText = spanEl.textContent;
-        spanEl.textContent = '保存完了！';
-        setTimeout(() => {
-          elements.btnAnalysisDownload.classList.remove('success');
-          spanEl.textContent = originalText;
-        }, 2000);
-      }
-    });
-  }
 
   // Close modals on Escape key
   window.addEventListener('keydown', (e) => {
@@ -1142,7 +1074,6 @@ function openBookDetailModal(book) {
 function closeBookDetailModal() {
   elements.bookDetailModal.classList.remove('active');
   detailModalActiveBook = null;
-  switchBackToDetails();
 }
 
 // Trigger standard book discussion in Chat from Detail Modal
@@ -1350,150 +1281,4 @@ function switchMobileTab(tab) {
   if (tab === 'chat') {
     elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
   }
-}
-
-// ==========================================================================
-// Dedicated Story Architecture Analyzer
-// ==========================================================================
-
-let analysisReportRawText = '';
-
-async function startStoryStructureAnalysis(book) {
-  // 1. Expand the modal width and switch views
-  elements.detailModalContent.classList.add('analysis-active');
-  elements.bookDetailInfoView.style.display = 'none';
-  elements.bookDetailAnalysisView.style.display = 'block';
-  elements.modalTitleDisplay.textContent = `物語構造分析: ${book.title}`;
-
-  // 2. Show skeleton loader, hide report container
-  elements.analysisSkeletonLoader.style.display = 'flex';
-  elements.analysisReportContainer.style.display = 'none';
-
-  // 3. Clear previous copy raw text
-  analysisReportRawText = '';
-
-  // 4. Verify API Key
-  if (!state.geminiKey) {
-    elements.analysisSkeletonLoader.style.display = 'none';
-    elements.analysisReportContainer.style.display = 'block';
-    elements.analysisReportContent.innerHTML = `
-      <div class="empty-state" style="padding: 20px 0;">
-        <p style="color: var(--accent-purple); font-weight: 600; margin-bottom: 8px;">⚠️ Gemini API キーが未設定です。</p>
-        <p style="font-size: 13px; color: var(--text-secondary);">画面上部の歯車アイコンをクリックして、API キーを設定してから再試行してください。</p>
-      </div>
-    `;
-    return;
-  }
-
-  // 5. Invoke Gemini API
-  try {
-    const text = await analyzeBookStructure(book);
-    analysisReportRawText = text;
-
-    // Render markdown to HTML using markdown-it
-    elements.analysisReportContent.innerHTML = md.render(text);
-
-    // Hide loader, show report
-    elements.analysisSkeletonLoader.style.display = 'none';
-    elements.analysisReportContainer.style.display = 'block';
-  } catch (error) {
-    console.error('物語構造分析エラー:', error);
-    elements.analysisSkeletonLoader.style.display = 'none';
-    elements.analysisReportContainer.style.display = 'block';
-    elements.analysisReportContent.innerHTML = `
-      <div class="empty-state" style="padding: 20px 0;">
-        <p style="color: #ef4444; font-weight: 600; margin-bottom: 8px;">⚠️ 分析エラーが発生しました。</p>
-        <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">${error.message}</p>
-        <button class="btn btn-secondary" onclick="startStoryStructureAnalysis(detailModalActiveBook)" style="font-size: 12px; padding: 6px 14px;">再試行</button>
-      </div>
-    `;
-  }
-}
-
-function switchBackToDetails() {
-  elements.detailModalContent.classList.remove('analysis-active');
-  elements.bookDetailAnalysisView.style.display = 'none';
-  elements.bookDetailInfoView.style.display = 'block';
-  elements.modalTitleDisplay.textContent = '書籍詳細情報';
-}
-
-async function analyzeBookStructure(book) {
-  const endpoint = `https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key=${state.geminiKey}`;
-
-  const systemInstruction = `
-あなたはナラトロジー（物語論）および創作理論に精通した冷徹な文芸批評家・物語構造の設計エンジニアです。
-ユーザーから提示された「1冊の書籍」について、執筆の参考（NotebookLMのソース）となる物語の構造分析を行います。
-
-以下の指示に厳格に従って、日本語で出力してください。
-
-【出力時の重要ルール】
-- 感情的な感想、賛辞、紹介、挨拶（「はじめに」「解説します」など）は一切不要です。
-- 物語の設計図をエンジニアリングの視点から解剖・抽出することに徹してください。
-- NotebookLMの強力なソースとして機能させるため、専門用語（アクト構造、ヒーローズ・ジャーニー、プロップの機能、プロットポイント、マクガフィン、伏線と回収など）を多用し、極めてロジカルで明晰な構造を記述してください。
-- 出力は必ず以下のマークダウン形式（見出しや箇条書き）に厳密に従ってください。
-
-# 物語構造分析レポート: 「\${book.title}」
-著者: \${book.author} / 出版社: \${book.publisher || '不明'}
-
-## 1. 点（主要な構成要素）
-* 【動機（トリガー）】：主人公が物語を動かす最大の欲求と、それが生じたきっかけは何か？詳細に記述してください。
-* 【変数（固定の役割）】：物語をドライブさせるために欠かせない登場人物とその機能的役割（例：謎の提示者、葛藤の鏡）を挙げよ。
-* 【世界観のルール】：物語を制限している不可逆なルール、または設定上の制約は何か？
-
-## 2. 線（つながりの力学）
-* 【因果の鎖】：序盤・中盤・終盤の重要なエピソード間を、論理的な因果（理由と結果）で結んで説明せよ。
-* 【感情のフック】：読者が物語を止められなくなる「情報の出し方」や「期待の裏切り」がどこで行われているか？
-
-## 3. 変数の置換可能性
-* 【物語の力学】：この物語の「核となる構造（例：ミステリーなら『日常の違和感→論理的解決』）」を抽象化して一行で述べよ。
-* 【置換の拡張】：この構造を、別のジャンル（例：ファンタジー、SF、ラブコメなど）に転用する場合、どの『変数』を入れ替えるべきか？
-  `;
-
-  // The payload contains ONLY the single book details
-  const userContent = `
-対象書籍:
-- タイトル: \${book.title}
-- 著者: \${book.author}
-- 出版社: \${book.publisher || '不明'}
-
-上記の書籍について、システム命令で指定されたフォーマットおよび条件に従って、物語의 構造分析を詳細に出力してください。
-  `;
-
-  const requestBody = {
-    contents: [
-      {
-        role: 'user',
-        parts: [{ text: userContent }]
-      }
-    ],
-    systemInstruction: {
-      parts: [{ text: systemInstruction }]
-    },
-    generationConfig: {
-      temperature: 0.2,
-      maxOutputTokens: 8192
-    }
-  };
-
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(requestBody)
-  });
-
-  if (!response.ok) {
-    const errData = await response.json().catch(() => ({}));
-    const errMsg = errData.error?.message || \`HTTP \${response.status}\`;
-    throw new Error(errMsg);
-  }
-
-  const responseData = await response.json();
-  const aiText = responseData.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!aiText) {
-    throw new Error('有効な分析レポートが生成されませんでした。');
-  }
-
-  return aiText;
 }
