@@ -169,54 +169,62 @@ function setupEventListeners() {
   // Clear Chat history
   elements.btnClearChat.addEventListener('click', clearChatHistory);
 
-  // Story Analyzer Event Listeners
-  elements.btnAnalyzeStructure.addEventListener('click', () => {
-    if (detailModalActiveBook) {
-      startStoryStructureAnalysis(detailModalActiveBook);
-    }
-  });
+  // Story Analyzer Event Listeners (with defensive checks for cache/version mismatches)
+  if (elements.btnAnalyzeStructure) {
+    elements.btnAnalyzeStructure.addEventListener('click', () => {
+      if (detailModalActiveBook) {
+        startStoryStructureAnalysis(detailModalActiveBook);
+      }
+    });
+  }
 
-  elements.btnAnalysisBack.addEventListener('click', switchBackToDetails);
+  if (elements.btnAnalysisBack) {
+    elements.btnAnalysisBack.addEventListener('click', switchBackToDetails);
+  }
 
-  elements.btnAnalysisCopy.addEventListener('click', () => {
-    if (analysisReportRawText) {
-      navigator.clipboard.writeText(analysisReportRawText).then(() => {
-        elements.btnAnalysisCopy.classList.add('success');
-        const spanEl = elements.btnAnalysisCopy.querySelector('span');
+  if (elements.btnAnalysisCopy) {
+    elements.btnAnalysisCopy.addEventListener('click', () => {
+      if (analysisReportRawText) {
+        navigator.clipboard.writeText(analysisReportRawText).then(() => {
+          elements.btnAnalysisCopy.classList.add('success');
+          const spanEl = elements.btnAnalysisCopy.querySelector('span');
+          const originalText = spanEl.textContent;
+          spanEl.textContent = 'コピー完了！';
+          setTimeout(() => {
+            elements.btnAnalysisCopy.classList.remove('success');
+            spanEl.textContent = originalText;
+          }, 2000);
+        }).catch(err => {
+          console.error('コピー失敗:', err);
+        });
+      }
+    });
+  }
+
+  if (elements.btnAnalysisDownload) {
+    elements.btnAnalysisDownload.addEventListener('click', () => {
+      if (analysisReportRawText && detailModalActiveBook) {
+        const blob = new Blob([analysisReportRawText], { type: 'text/markdown;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        const safeTitle = detailModalActiveBook.title.replace(/[\\/:*?"<>|]/g, '_');
+        link.download = `${safeTitle}_物語構造分析.md`;
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        elements.btnAnalysisDownload.classList.add('success');
+        const spanEl = elements.btnAnalysisDownload.querySelector('span');
         const originalText = spanEl.textContent;
-        spanEl.textContent = 'コピー完了！';
+        spanEl.textContent = '保存完了！';
         setTimeout(() => {
-          elements.btnAnalysisCopy.classList.remove('success');
+          elements.btnAnalysisDownload.classList.remove('success');
           spanEl.textContent = originalText;
         }, 2000);
-      }).catch(err => {
-        console.error('コピー失敗:', err);
-      });
-    }
-  });
-
-  elements.btnAnalysisDownload.addEventListener('click', () => {
-    if (analysisReportRawText && detailModalActiveBook) {
-      const blob = new Blob([analysisReportRawText], { type: 'text/markdown;charset=utf-8;' });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      const safeTitle = detailModalActiveBook.title.replace(/[\\/:*?"<>|]/g, '_');
-      link.download = `${safeTitle}_物語構造分析.md`;
-      link.style.display = 'none';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-      elements.btnAnalysisDownload.classList.add('success');
-      const spanEl = elements.btnAnalysisDownload.querySelector('span');
-      const originalText = spanEl.textContent;
-      spanEl.textContent = '保存完了！';
-      setTimeout(() => {
-        elements.btnAnalysisDownload.classList.remove('success');
-        spanEl.textContent = originalText;
-      }, 2000);
-    }
-  });
+      }
+    });
+  }
 
   // Close modals on Escape key
   window.addEventListener('keydown', (e) => {
