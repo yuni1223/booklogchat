@@ -1209,13 +1209,21 @@ function showTypingIndicator() {
 
 // Gemini API Integration Core
 async function callGeminiAPI() {
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${state.geminiKey}`;
+  // Use stable gemini-1.5-flash to prevent HTTP 404 / invalid model errors
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${state.geminiKey}`;
   
-  // Construct user bookshelf description for AI injection
-  let bookshelfContext = `ユーザー名: ${state.username}\n本棚登録書籍一覧 (${state.books.length}冊):\n`;
-  state.books.forEach((book, idx) => {
+  // Construct user bookshelf description for AI injection (limit to max 150 books to prevent payload size and token limit errors)
+  const maxBooksContext = 150;
+  let bookshelfContext = `ユーザー名: ${state.username}\n本棚登録書籍一覧 (全${state.books.length}冊中、上位${Math.min(state.books.length, maxBooksContext)}冊を表示):\n`;
+  
+  const booksToInject = state.books.slice(0, maxBooksContext);
+  booksToInject.forEach((book, idx) => {
     bookshelfContext += `${idx + 1}. 「${book.title}」 / 著者: ${book.author} (カテゴリ: ${translateCategory(book.category)})\n`;
   });
+  
+  if (state.books.length > maxBooksContext) {
+    bookshelfContext += `...他 ${state.books.length - maxBooksContext} 冊が本棚に登録されていますが、コンテキスト節約のため省略します。\n`;
+  }
 
   const systemInstruction = `
 あなたはユーザーのブクログ本棚の読書記録を読み込み、本が大好きなパーソナル読書アシスタントとして対話します。
