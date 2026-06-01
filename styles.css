@@ -1233,3 +1233,153 @@ body {
     height: 16px;
   }
 }
+
+/* ==========================================================================
+   Dedicated Story Architecture Analyzer Styles
+   ========================================================================== */
+
+#detail-modal-content {
+  width: 500px;
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s ease;
+}
+
+#detail-modal-content.analysis-active {
+  width: 760px;
+  max-width: 95%;
+}
+
+.analysis-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--glass-border);
+  margin-bottom: 20px;
+}
+
+/* Skeleton Loading Wave */
+.skeleton-loader-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 10px 0;
+}
+
+.skeleton-line {
+  height: 16px;
+  background: linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.08) 37%, rgba(255,255,255,0.03) 63%);
+  background-size: 400% 100%;
+  animation: skeleton-pulse 1.4s ease infinite;
+  border-radius: var(--radius-sm);
+  width: 100%;
+}
+
+.skeleton-line.skeleton-title { height: 28px; width: 60%; margin-bottom: 10px; }
+.skeleton-line.skeleton-header { height: 22px; width: 40%; margin-top: 10px; }
+.skeleton-line.skeleton-text { height: 14px; width: 100%; }
+.skeleton-line.skeleton-text-medium { height: 14px; width: 85%; }
+.skeleton-line.skeleton-text-short { height: 14px; width: 55%; }
+
+@keyframes skeleton-pulse {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* Analysis Report Panel */
+.analysis-report-container {
+  max-height: 480px;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+.analysis-report-markdown {
+  font-family: var(--font-body);
+  color: var(--text-primary);
+  font-size: 14.5px;
+  line-height: 1.7;
+}
+
+.analysis-report-markdown h2 {
+  font-family: var(--font-heading);
+  font-size: 18px;
+  font-weight: 700;
+  margin-top: 24px;
+  margin-bottom: 12px;
+  color: var(--text-primary);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 6px;
+  letter-spacing: -0.3px;
+}
+
+.analysis-report-markdown h3 {
+  font-family: var(--font-heading);
+  font-size: 15px;
+  font-weight: 600;
+  margin-top: 18px;
+  margin-bottom: 8px;
+  color: var(--accent-purple);
+}
+
+.analysis-report-markdown ul {
+  margin-left: 20px;
+  margin-bottom: 16px;
+  list-style-type: square;
+}
+
+.analysis-report-markdown li {
+  margin-bottom: 6px;
+}
+
+.analysis-report-markdown strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.analysis-report-markdown p {
+  margin-bottom: 14px;
+}
+
+/* Premium Export Buttons (NotebookLM Integration) */
+.btn-export {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--glass-border);
+  color: var(--text-secondary);
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 11.5px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: var(--transition-bounce);
+  backdrop-filter: blur(4px);
+}
+
+.btn-export svg {
+  color: var(--text-muted);
+  transition: var(--transition-smooth);
+}
+
+.btn-export:hover {
+  background: rgba(99, 102, 241, 0.1);
+  color: var(--text-primary);
+  border-color: rgba(99, 102, 241, 0.3);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-export:hover svg {
+  color: var(--accent-indigo);
+}
+
+.btn-export.success {
+  background: rgba(16, 185, 129, 0.12) !important;
+  border-color: rgba(16, 185, 129, 0.3) !important;
+  color: #10b981 !important;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.1);
+}
+
+.btn-export.success svg {
+  color: #10b981 !important;
+}
