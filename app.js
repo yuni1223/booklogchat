@@ -12,7 +12,6 @@ const state = {
   selectedStatus: '読んだ本', // status filter (読んだ本, 読みたい本, 積読, etc.)
   currentSortRule: 'publisher', // default sorting rule: 出版社順
   searchQuery: '',
-  activeAnalysisBook: null, // Track currently analyzed book for NotebookLM filename
   chatHistory: [
     {
       role: 'model',
@@ -1007,33 +1006,12 @@ function closeBookDetailModal() {
 elements.btnDiscussBook.addEventListener('click', () => {
   if (detailModalActiveBook) {
     const book = detailModalActiveBook;
-    state.activeAnalysisBook = book; // Save active book
     closeBookDetailModal();
     
     // Auto switch mobile tab to chat view so they see the AI response start
     switchMobileTab('chat');
     
-    sendDirectPrompt(`本棚にある書籍「${book.title}」（著者: ${book.author}）について、執筆の参考となる物語の構造分析を行います。
-
-以下の物語の構造を、後でNotebookLMで分析するために、指定のフォーマットに従って詳細に抽出・分析してください。
-
-# 抽出・分析上の注意
-- 感傷的な感想は一切不要です。物語の設計図をエンジニアリングする視点から、冷静に客観的・構造的に分析してください。
-- NotebookLMのソースとして活用するため、文芸批評やナラトロジー（物語論）などの専門用語（例: ヒーローズ・ジャーニー、プロップの機能、アクト構造、マクガフィン、プロットポイントなど）を多用し、極めて明晰で論理的な構造を構築してください。
-
-# フォーマット
-## 1. 点（主要な構成要素）
-* 【動機（トリガー）】：主人公が物語を動かす最大の欲求と、それが生じたきっかけは何か？
-* 【変数（固定の役割）】：物語をドライブさせるために欠かせない登場人物とその機能的役割（例：謎の提示者、葛藤の鏡）を挙げよ。
-* 【世界観のルール】：物語を制限している不可逆なルール、または設定上の制約は何か？
-
-## 2. 線（つながりの力学）
-* 【因果の鎖】：序盤・中盤・終盤の重要なエピソード間を、論理的な因果（理由と結果）で結んで説明せよ。
-* 【感情のフック】：読者が物語を止められなくなる「情報の出し方」や「期待の裏切り」がどこで行われているか？
-
-## 3. 変数の置換可能性
-* 【物語の力学】：この物語の「核となる構造（例：ミステリーなら『日常の違和感→論理的解決』）」を抽象化して一行で述べよ。
-* 【置換の拡張】：この構造を、別のジャンル（例：ファンタジー、SF、ラブコメなど）に転用する場合、どの『変数』を入れ替えるべきか？`);
+    sendDirectPrompt(`本棚にある「${book.title}」（著者: ${book.author}）について詳しく語り合いましょう！この本の内容、魅力、あなたの感想などを教えてください。`);
   }
 });
 
@@ -1057,77 +1035,6 @@ function appendMessage(role, text) {
   timeEl.textContent = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
   
   messageEl.appendChild(contentEl);
-  
-  // If the message is from AI and contains substantial analysis text, append NotebookLM Export Tools
-  if (role === 'model' && text.length > 100) {
-    const toolsEl = document.createElement('div');
-    toolsEl.className = 'message-export-tools';
-    
-    // 1. Copy Button
-    const btnCopy = document.createElement('button');
-    btnCopy.className = 'btn-export btn-export-copy';
-    btnCopy.title = 'NotebookLM用のマークダウンソースをクリップボードにコピーします';
-    btnCopy.innerHTML = `
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="14" height="14">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H5.25m11.9-3.664A2.251 2.251 0 0 0 15 2.25h-3a2.251 2.251 0 0 0-2.15 1.586m5.8 0c.065.21.1.433.1.664v.75h-6V4.5c0-.231.035-.454.1-.664M6.75 7.5H4.875c-.621 0-1.125.504-1.125 1.125v12c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V16.5m-3.75-3h1.5m-1.5-3h1.5m-1.5-3h1.5" />
-      </svg>
-      <span>NotebookLM用にコピー</span>
-    `;
-    btnCopy.addEventListener('click', () => {
-      navigator.clipboard.writeText(text).then(() => {
-        const span = btnCopy.querySelector('span');
-        span.textContent = 'コピー完了！';
-        btnCopy.classList.add('success');
-        setTimeout(() => {
-          span.textContent = 'NotebookLM用にコピー';
-          btnCopy.classList.remove('success');
-        }, 2000);
-      }).catch(err => {
-        console.error('Clipboard copy failed:', err);
-      });
-    });
-    
-    // 2. Download Button
-    const btnDownload = document.createElement('button');
-    btnDownload.className = 'btn-export btn-export-download';
-    btnDownload.title = '分析結果をNotebookLMにそのまま取り込めるMarkdownファイル(.md)として保存します';
-    btnDownload.innerHTML = `
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="14" height="14">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
-      </svg>
-      <span>ソース(.md)を保存</span>
-    `;
-    btnDownload.addEventListener('click', () => {
-      const blob = new Blob([text], { type: 'text/markdown;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      
-      let filename = '物語構造分析.md';
-      if (state.activeAnalysisBook) {
-        filename = `${state.activeAnalysisBook.title}_物語構造分析.md`;
-      }
-      
-      link.href = url;
-      link.setAttribute('download', filename);
-      link.style.visibility = 'hidden';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      
-      const span = btnDownload.querySelector('span');
-      span.textContent = '保存しました！';
-      btnDownload.classList.add('success');
-      setTimeout(() => {
-        span.textContent = 'ソース(.md)を保存';
-        btnDownload.classList.remove('success');
-      }, 2000);
-    });
-    
-    toolsEl.appendChild(btnCopy);
-    toolsEl.appendChild(btnDownload);
-    messageEl.appendChild(toolsEl);
-  }
-  
   messageEl.appendChild(timeEl);
   elements.chatMessages.appendChild(messageEl);
   
