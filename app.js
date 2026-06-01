@@ -1210,7 +1210,7 @@ function showTypingIndicator() {
 // Gemini API Integration Core
 async function callGeminiAPI() {
   // Use stable gemini-1.5-flash to prevent HTTP 404 / invalid model errors
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${state.geminiKey}`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${state.geminiKey}`;
   
   // Construct user bookshelf description for AI injection (limit to max 150 books to prevent payload size and token limit errors)
   const maxBooksContext = 150;
