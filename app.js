@@ -20,6 +20,26 @@ const state = {
   ]
 };
 
+// Resilient Fetch with Timeout to prevent application blocking/hanging
+async function fetchWithTimeout(resource, options = {}) {
+  const { timeout = 5000 } = options;
+  
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeout);
+  
+  try {
+    const response = await fetch(resource, {
+      ...options,
+      signal: controller.signal
+    });
+    clearTimeout(id);
+    return response;
+  } catch (err) {
+    clearTimeout(id);
+    throw err;
+  }
+}
+
 // Initialize Markdown Parser
 const md = window.markdownit({
   html: false,
@@ -301,7 +321,7 @@ async function fetchBooklogData() {
       for (let i = 0; i < proxies.length; i++) {
         const proxiedUrl = proxies[i](booklogApiUrl);
         try {
-          const response = await fetch(proxiedUrl);
+          const response = await fetchWithTimeout(proxiedUrl, { timeout: 4000 });
           if (!response.ok) {
             throw new Error(`HTTP ${response.status}`);
           }
@@ -394,10 +414,12 @@ async function fetchBooklogData() {
     enrichBookMetadata();
   } catch (error) {
     console.error('All proxies failed. Last error:', error);
-    elements.chatStatus.textContent = '本棚データの取得失敗';
+    if (elements.chatStatus) {
+      elements.chatStatus.textContent = '本棚データの取得失敗';
+    }
     
-    let displayMessage = error.message;
-    if (displayMessage.includes('403')) {
+    let displayMessage = error && error.message ? error.message : String(error || '不明なエラー');
+    if (displayMessage && typeof displayMessage === 'string' && displayMessage.includes('403')) {
       displayMessage += ' (ブクログ側またはプロキシサーバーにより接続が制限されています。しばらく時間をおいてお試しください)';
     }
     renderErrorState(displayMessage);
@@ -466,9 +488,14 @@ async function enrichBookMetadata() {
   try {
     const promises = chunks.map(async (chunk) => {
       const url = `https://api.openbd.jp/v1/get?isbn=${chunk.join(',')}`;
-      const response = await fetch(url);
-      if (!response.ok) return [];
-      return await response.json();
+      try {
+        const response = await fetchWithTimeout(url, { timeout: 5000 });
+        if (!response.ok) return [];
+        return await response.json();
+      } catch (err) {
+        console.warn(`Metadata enrichment failed for ISBNs ${chunk.join(',')}:`, err);
+        return [];
+      }
     });
 
     const results = await Promise.all(promises);
