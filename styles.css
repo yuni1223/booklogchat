@@ -518,6 +518,56 @@ body {
   align-self: flex-end;
 }
 
+/* Message Export Tools (NotebookLM integration helper) */
+.message-export-tools {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  align-self: flex-start;
+}
+
+.btn-export {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--glass-border);
+  color: var(--text-secondary);
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: var(--transition-bounce);
+  backdrop-filter: blur(4px);
+}
+
+.btn-export svg {
+  color: var(--text-muted);
+  transition: var(--transition-smooth);
+}
+
+.btn-export:hover {
+  background: rgba(99, 102, 241, 0.1);
+  color: var(--text-primary);
+  border-color: rgba(99, 102, 241, 0.3);
+  transform: translateY(-1px);
+}
+
+.btn-export:hover svg {
+  color: var(--accent-indigo);
+}
+
+.btn-export.success {
+  background: rgba(16, 185, 129, 0.12) !important;
+  border-color: rgba(16, 185, 129, 0.3) !important;
+  color: #10b981 !important;
+}
+
+.btn-export.success svg {
+  color: #10b981 !important;
+}
+
 /* Chat Input Footer Area */
 .chat-footer {
   padding: 16px 20px;
