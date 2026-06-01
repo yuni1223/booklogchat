@@ -1209,8 +1209,8 @@ function showTypingIndicator() {
 
 // Gemini API Integration Core
 async function callGeminiAPI() {
-  // Upgrade to Gemini 1.5 Pro for professional narratology and structural analysis
-  const endpoint = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent?key=${state.geminiKey}`;
+  // Upgrade to Gemini 2.0 Flash for premium narratology and high quota limits
+  const endpoint = `https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key=${state.geminiKey}`;
   
   // Construct user bookshelf description for AI injection (limit to max 150 books to prevent payload size and token limit errors)
   const maxBooksContext = 150;
