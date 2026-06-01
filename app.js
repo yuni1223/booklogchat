@@ -288,7 +288,41 @@ function saveSettings() {
   fetchBooklogData();
 }
 
-// Fetch public bookshelf from Booklog (via CORS proxy with automatic fallback and parallel status queries)
+// Native JSONP wrapper for Booklog API to bypass CORS proxy dependency entirely and load instantly
+function fetchBooklogJSONP(username, statusId) {
+  return new Promise((resolve, reject) => {
+    const callbackName = `booklogCallback_${statusId}_${Math.random().toString(36).substring(2, 9)}`;
+    const script = document.createElement('script');
+    
+    const timeoutId = setTimeout(() => {
+      cleanup();
+      reject(new Error('ブクログAPIの応答タイムアウト（8秒）'));
+    }, 8000);
+    
+    function cleanup() {
+      clearTimeout(timeoutId);
+      if (script.parentNode) {
+        script.parentNode.removeChild(script);
+      }
+      delete window[callbackName];
+    }
+    
+    window[callbackName] = function(data) {
+      cleanup();
+      resolve(data);
+    };
+    
+    script.src = `https://api.booklog.jp/json/${username}?status=${statusId}&count=10000&callback=${callbackName}`;
+    script.onerror = function() {
+      cleanup();
+      reject(new Error('スクリプト読み込みエラー（ブクログ側の一時的な障害、またはネットワークの切断）'));
+    };
+    
+    document.body.appendChild(script);
+  });
+}
+
+// Fetch public bookshelf from Booklog (via native JSONP with CORS proxy automatic fallback)
 async function fetchBooklogData() {
   renderLoadingState();
   elements.chatStatus.textContent = '本棚をロード中...';
@@ -317,21 +351,32 @@ async function fetchBooklogData() {
       let success = false;
       let data = null;
 
-      // Try each proxy sequentially for this status
-      for (let i = 0; i < proxies.length; i++) {
-        const proxiedUrl = proxies[i](booklogApiUrl);
-        try {
-          const response = await fetchWithTimeout(proxiedUrl, { timeout: 4000 });
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
+      // 1. Try native JSONP first (CORS-less, highly stable and fast!)
+      try {
+        data = await fetchBooklogJSONP(state.username, status.id);
+        if (data && data.books) {
+          success = true;
+        }
+      } catch (error) {
+        console.warn(`JSONP failed for status ${status.id}, falling back to proxies:`, error);
+        lastError = error;
+        
+        // 2. Fallback to CORS proxies sequentially
+        for (let i = 0; i < proxies.length; i++) {
+          const proxiedUrl = proxies[i](booklogApiUrl);
+          try {
+            const response = await fetchWithTimeout(proxiedUrl, { timeout: 4000 });
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}`);
+            }
+            data = await response.json();
+            if (data && data.books) {
+              success = true;
+              break;
+            }
+          } catch (err) {
+            lastError = err;
           }
-          data = await response.json();
-          if (data && data.books) {
-            success = true;
-            break;
-          }
-        } catch (error) {
-          lastError = error;
         }
       }
 
