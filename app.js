@@ -10,7 +10,7 @@ const state = {
   filteredBooks: [],
   selectedCategory: 'novel',
   selectedStatus: '読んだ本', // status filter (読んだ本, 読みたい本, 積読, etc.)
-  currentSortRule: 'publisher', // default sorting rule: 出版社順
+  currentSortRule: 'author', // default sorting rule: 著者順
   searchQuery: '',
   chatHistory: [
     {
@@ -561,8 +561,9 @@ async function enrichBookMetadata() {
                   // Expanded list of known fiction novelists (including classical & modern ones to cover classic paperbacks)
                   const novelists = [
                     '中島敦', '太宰治', '芥川龍之介', '夏目漱石', '森鴎外', '川端康成', '三島由紀夫', '梶井基次郎', '江戸川乱歩', '坂口安吾', '有島武郎', '芥川竜之介',
-                    '辻村深月', '村上春樹', '東野圭吾', '伊坂幸太郎', '宮部みゆき', '湊かなえ', '有川浩', '朝井リョウ', '住野よる', '米澤穂信', '西尾西', '西尾維新', '綾辻行人', '新海誠', '知念実希人', '瀬尾まいこ', '重松清', '小野不由美', '宮下奈都', '三浦しをん', '池井戸潤', '川村元気', '誉田哲也', '星新一', '太宰治', '夏川草介', '原田マハ', '森見ド美彦', '森見登美彦', '万城目学', '中村文則', '又吉直樹', '薬丸岳', '横山秀夫', 
-                    '野村美月', '古野まほろ', '佐藤青南', '陸秋秋', '有栖川有栖', '北村薫', '恩田陸', '恒川光太郎', '貴志祐介', '我孫子武丸', '歌野晶午', '麻耶雄嵩', '法月綸太郎', '小野不由美'
+                    '辻村深月', '村上春樹', '東野圭吾', '伊坂幸太郎', '宮部みゆき', '湊かなえ', '有川浩', '朝井リョウ', '住野よる', '米澤穂信', '西尾西', '西尾維新', '西尾', '綾辻行人', '新海誠', '知念実希人', '瀬尾まいこ', '重松清', '小野不由美', '宮下奈都', '三浦しをん', '池井戸潤', '川村元気', '誉田哲也', '星新一', '夏川草介', '原田マハ', '森見登美彦', '万城目学', '中村文則', '又吉直樹', '薬丸岳', '横山秀夫', 
+                    '野村美月', '古野まほろ', '佐藤青南', '陸秋秋', '有栖川有栖', '北村薫', '恩田陸', '恒川光太郎', '貴志祐介', '我孫子武丸', '歌野晶午', '麻耶雄嵩', '法月綸太郎', '小野不由美',
+                    '川口俊和', '柚月裕子', '雨穴', '浅田次郎', '奥田英朗', '荻原浩', '西加奈子', '加藤シゲアキ', '凪良ゆう', '一穂ミチ', '町田そのこ', '青山美智子', '小川糸', '綿矢りさ', '金原ひとみ', '川上未映子', '村田沙耶香', '平野啓一郎', '角田光代', '森絵都', '唯川恵', '林真理子', '赤川次郎', '西村京太郎', '内田康夫', '山崎豊子', '松本清張', '司馬遼太郎', '池波正太郎', '藤沢周平', '吉川英治'
                   ];
                   const isKnownNovelist = novelists.some(auth => authorUpper.includes(auth.toUpperCase()));
                   
@@ -570,7 +571,10 @@ async function enrichBookMetadata() {
                   const isFictionSeries = seriesUpper.includes('文庫') || seriesUpper.includes('ミステリ') || seriesUpper.includes('推理') || pubUpper.includes('文庫') || titleUpper.includes('文庫');
                   
                   // Major literary publishers that publish hardcover novels
-                  const literaryPublishers = ['新潮社', '講談社', '集英社', '文藝春秋', '幻冬舎', 'ポプラ社', '双葉社', '角川', 'KADOKAWA', '徳間書店', '光文社', '早川書房', '東京創元社', '文春', '実業之日本社', 'ポプラ文庫', '宝島社'];
+                  const literaryPublishers = [
+                    '新潮社', '講談社', '集英社', '文藝春秋', '幻冬舎', 'ポプラ社', '双葉社', '角川', 'KADOKAWA', '徳間書店', '光文社', '早川書房', '東京創元社', '文春', '実業之日本社', 'ポプラ文庫', '宝島社',
+                    'サンマーク出版', '中央公論新社', '中央公論', '飛鳥新社', '祥伝社'
+                  ];
                   const isLiteraryPublisher = literaryPublishers.some(pub => pubUpper.includes(pub));
                   
                   if (isKnownNovelist) {
@@ -1190,8 +1194,7 @@ function showTypingIndicator() {
 
 // Gemini API Integration Core
 async function callGeminiAPI() {
-  // Upgrade to Gemini 2.0 Flash for premium narratology and high quota limits
-  const endpoint = `https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key=${state.geminiKey}`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${state.geminiKey}`;
   
   // Construct user bookshelf description for AI injection (limit to max 150 books to prevent payload size and token limit errors)
   const maxBooksContext = 150;
@@ -1207,7 +1210,7 @@ async function callGeminiAPI() {
   }
 
   const systemInstruction = `
-あなたはユーザーのブクログ本棚の読書記録を読み込み、本が大好きなパーソナル読書アシスタントとして対話します。
+ユーザーの本棚の読書記録を読み込み、本が大好きなパーソナル読書アシスタントとして対話します。
 以下の指示に従って、日本語で親しみやすく回答してください。
 
 【ユーザーの本棚情報】
@@ -1222,7 +1225,13 @@ ${bookshelfContext}
 
   // Compile history for standard chat format in standard format required by Google API
   // Note: Gemini API requires alternate user and model roles. System instruction is sent separately in model configs.
-  const contents = state.chatHistory.map(item => ({
+  // CRITICAL FIX: The conversation MUST start with a 'user' role. Filter out the initial welcome message from the model.
+  const apiHistory = state.chatHistory.slice();
+  if (apiHistory.length > 0 && apiHistory[0].role === 'model') {
+    apiHistory.shift();
+  }
+
+  const contents = apiHistory.map(item => ({
     role: item.role === 'model' ? 'model' : 'user',
     parts: [{ text: item.text }]
   }));
