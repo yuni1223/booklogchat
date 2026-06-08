@@ -332,7 +332,7 @@ async function fetchBooklogData() {
           const originalIndex = (status.id * 100000) + bookIdx;
 
           return {
-            title: book.title || '無題',
+            title: cleanPublisherLabel(book.title || '無題'),
             author: cleanAuthorName(book.author || '著者不明'),
             image: coverImage,
             category: (() => {
@@ -647,9 +647,43 @@ async function enrichBookMetadata() {
         // Delay to prevent hitting Google Books rate limits (403/429)
         await new Promise(resolve => setTimeout(resolve, 100));
         
-        const response = await fetchWithTimeout(url, { timeout: 4000 });
+        let response = await fetchWithTimeout(url, { timeout: 4000 });
+        if (!response.ok || response.status === 429) {
+          console.warn(`Direct Google Books API query rate limited or failed (${response.status}), falling back to CORS proxies for "${book.title}"...`);
+          const fallbackProxies = [
+            u => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+            u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+            u => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`
+          ];
+          for (const proxy of fallbackProxies) {
+            try {
+              const proxiedUrl = proxy(url);
+              const proxyResp = await fetchWithTimeout(proxiedUrl, { timeout: 5000 });
+              if (proxyResp.ok) {
+                response = proxyResp;
+                break;
+              }
+            } catch (err) {
+              console.warn(`Proxy failed for Google Books API:`, err);
+            }
+          }
+        }
+        
         if (response.ok) {
-          const data = await response.json();
+          let data = await response.json();
+          // Extract nested data if returned via wrapper proxy like AllOrigins
+          if (data && data.contents) {
+            if (typeof data.contents === 'string') {
+              try {
+                data = JSON.parse(data.contents);
+              } catch (e) {
+                console.warn("Failed to parse AllOrigins wrapped content:", e);
+              }
+            } else {
+              data = data.contents;
+            }
+          }
+          
           if (data && data.items && data.items.length > 0) {
             const info = data.items[0].volumeInfo;
             if (info) {
@@ -719,6 +753,14 @@ function cleanAuthorName(author) {
   // Format whitespace
   clean = clean.trim().replace(/\s+/g, ' ');
   return clean;
+}
+
+// Remove publisher labels in brackets from book titles (e.g. "(新潮文庫)", "（角川文庫）") to keep styling consistent
+function cleanPublisherLabel(title) {
+  if (!title) return '';
+  const labelKeywords = '文庫|新書|選書|コミック|新装版|講談社|小学館|集英社|新潮|角川|KADOKAWA|文藝春秋|文春|双葉|幻冬舎|徳間|ポプラ|光文社|東京創元|早川|ハヤカワ|BOX|COMICS|PHP|祥伝社|中公|ちくま';
+  const regex = new RegExp(`\\s*[\\(\\uff08\\[\\uff3b\\<\\u3008](?:[\\s\\S]*?)(?:${labelKeywords})(?:[\\s\\S]*?)[\\)\\uff09\\]\\uff3d\\>\\u3009]`, 'gi');
+  return title.replace(regex, '').trim();
 }
 
 // Smart Series Resolver to clean labels and dynamically group unnumbered book series
