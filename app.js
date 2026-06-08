@@ -362,7 +362,10 @@ async function fetchBooklogData() {
             })(),
             release: book.release || '不明',
             publisher: '不明', // will be enriched
-            series: '', // will be enriched
+            series: (() => {
+               const tempBook = { title: book.title || '', author: cleanAuthorName(book.author || '著者不明') };
+               return resolveBookSeries(tempBook, '');
+            })(),
             asin: asin,
             url: book.url || `https://booklog.jp/item/1/${asin}`,
             status: status.label,
@@ -493,8 +496,9 @@ async function enrichBookMetadata() {
         const matchedBook = isbnMap[isbn13];
         if (matchedBook) {
           const rawSeries = item.summary.series || '';
-          if (rawSeries) {
-            matchedBook.series = cleanSeriesName(rawSeries);
+          const resolvedSeries = resolveBookSeries(matchedBook, rawSeries);
+          if (resolvedSeries) {
+            matchedBook.series = resolvedSeries;
           }
           // PROTECT AUTHOR: Only overwrite if Booklog author is unknown
           if (matchedBook.author === '著者不明') {
@@ -635,17 +639,75 @@ function cleanAuthorName(author) {
   return clean;
 }
 
-// Clean up series names to filter out publishing imprints/labels and keep only actual work series
-function cleanSeriesName(series) {
-  if (!series) return '';
-  const sUpper = series.toUpperCase();
-  // If it's just a generic publisher imprint/label, ignore it for title/work grouping
-  const genericImprints = ['文庫', '新書', '選書', 'コミック', 'COMICS', '学術文庫', '学芸文庫', '選集', '全集', 'ブックス', 'BOOKS', 'ノベルス', 'NOVELS'];
-  const isGeneric = genericImprints.some(imp => sUpper.includes(imp));
-  if (isGeneric) {
-    return '';
+// Smart Series Resolver to clean labels and dynamically group unnumbered book series
+function resolveBookSeries(book, rawSeries) {
+  const title = book.title || '';
+  const author = book.author || '';
+  const titleUpper = title.toUpperCase();
+  const authorUpper = author.toUpperCase();
+
+  // 1. Heuristics for famous unnumbered series
+  // A. 階段島シリーズ (河野裕)
+  const kaidanTitles = [
+    'いなくなれ、群青',
+    'その白さえ嘘だとしても',
+    '汚れた赤を恋と呼ぶんだ',
+    '凶器は壊れた黒の叫び',
+    '夜空の底は深く濃い青',
+    'きみの世界に、青が降る'
+  ];
+  if (authorUpper.includes('河野裕') && kaidanTitles.some(t => title.includes(t))) {
+    return '階段島シリーズ';
   }
-  return series.trim();
+
+  // B. 〈物語〉シリーズ (西尾維新)
+  if (authorUpper.includes('西尾維新') && title.endsWith('物語') && !title.startsWith('掟上今日子')) {
+    return '〈物語〉シリーズ';
+  }
+
+  // C. 掟上今日子シリーズ (西尾維新)
+  if (authorUpper.includes('西尾維新') && (title.startsWith('掟上今日子') || title.includes('今日子の'))) {
+    return '掟上今日子シリーズ';
+  }
+
+  // D. 加賀恭一郎シリーズ (東野圭吾)
+  const kagaTitles = [
+    '卒業', '眠りの森', 'どちらかが彼女を殺した', '悪意', '私が彼を殺した',
+    '嘘をもうひとつだけ', '赤い指', '新参者', '麒麟の翼', '祈りの幕が下りる時',
+    '希望の糸', 'あなたが誰かを殺した'
+  ];
+  if (authorUpper.includes('東野圭吾') && kagaTitles.some(t => title === t || title.startsWith(t))) {
+    return '加賀恭一郎シリーズ';
+  }
+
+  // 2. Clean up raw series metadata from API if available
+  if (rawSeries) {
+    let clean = rawSeries.trim();
+    // Strip common publisher labels / imprints
+    const labelRegex = /(講談社BOX|KADOKAWA|角川|集英社|新潮|小学館|ポプラ社|早川書房|ハヤカワ|ちくま|筑摩書房|岩波|双葉社|幻冬舎|徳間書店|PHP|光文社|実業之日本社|宝島社|東京創元社|文藝春秋|文春|オーバーラップ|ガガガ|電撃|ファンタジア|スニーカー|ダッシュエックス|MF|HJ|GA|ファミ通|ヒーロー|レジェンド|アルファポリス)/gi;
+    clean = clean.replace(labelRegex, '');
+
+    // Strip generic endings
+    const genericEndingsRegex = /(文庫|新書|選書|コミック|COMICS|選集|全集|ブックス|BOOKS|ノベルス|NOVELS|レーベル|BOX|SPECIAL|スペシャル)$/gi;
+    clean = clean.replace(genericEndingsRegex, '');
+
+    clean = clean.trim();
+    if (clean && clean.length > 1) {
+      return clean;
+    }
+  }
+
+  // 3. Fallback: Check for common title prefixes (e.g. "ハリー・ポッターと..." -> "ハリー・ポッター")
+  const prefixRegex = /^([a-zA-Z0-9\u30a0-\u30ff\u3040-\u309f\u4e00-\u9faf\uff41-\uff5a\uff21-\uff3a\uff10-\uff19\u3005\u3006\u30fc]+)(シリーズ|と|：|:|\s+-|\s+ー|\s+PART|\s+VOL)/i;
+  const prefixMatch = title.match(prefixRegex);
+  if (prefixMatch) {
+    const candidate = prefixMatch[1].trim();
+    if (candidate.length > 2) {
+      return candidate;
+    }
+  }
+
+  return '';
 }
 
 // Format publication date
