@@ -759,7 +759,8 @@ function cleanAuthorName(author) {
 function cleanPublisherLabel(title) {
   if (!title) return '';
   const labelKeywords = '文庫|新書|選書|コミック|新装版|講談社|小学館|集英社|新潮|角川|KADOKAWA|文藝春秋|文春|双葉|幻冬舎|徳間|ポプラ|光文社|東京創元|早川|ハヤカワ|BOX|COMICS|PHP|祥伝社|中公|ちくま';
-  const regex = new RegExp(`\\s*[\\(\\uff08\\[\\uff3b\\<\\u3008](?:[\\s\\S]*?)(?:${labelKeywords})(?:[\\s\\S]*?)[\\)\\uff09\\]\\uff3d\\>\\u3009]`, 'gi');
+  // Safe regex avoiding catastrophic backtracking by ensuring scanned content does not cross closing brackets
+  const regex = new RegExp(`\\s*[\\(\\uff08\\[\\uff3b\\<\\u3008][^\\)\\uff09\\]\\uff3d\\>\\u3009]*?(?:${labelKeywords})[^\\)\\uff09\\]\\uff3d\\>\\u3009]*?[\\)\\uff09\\]\\uff3d\\>\\u3009]`, 'gi');
   return title.replace(regex, '').trim();
 }
 
