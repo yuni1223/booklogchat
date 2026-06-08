@@ -743,7 +743,8 @@ function resolveBookSeries(book, rawSeries) {
   }
 
   // B. 〈物語〉シリーズ (西尾維新)
-  if (authorUpper.includes('西尾維新') && title.endsWith('物語') && !title.startsWith('掟上今日子')) {
+  const parsedTitle = parseTitle(title);
+  if (authorUpper.includes('西尾維新') && parsedTitle.base.endsWith('物語') && !title.startsWith('掟上今日子')) {
     return '〈物語〉シリーズ';
   }
 
