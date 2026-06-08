@@ -362,6 +362,7 @@ async function fetchBooklogData() {
             })(),
             release: book.release || '不明',
             publisher: '不明', // will be enriched
+            series: '', // will be enriched
             asin: asin,
             url: book.url || `https://booklog.jp/item/1/${asin}`,
             status: status.label,
@@ -491,6 +492,10 @@ async function enrichBookMetadata() {
         // Find matching book in our list
         const matchedBook = isbnMap[isbn13];
         if (matchedBook) {
+          const rawSeries = item.summary.series || '';
+          if (rawSeries) {
+            matchedBook.series = cleanSeriesName(rawSeries);
+          }
           // PROTECT AUTHOR: Only overwrite if Booklog author is unknown
           if (matchedBook.author === '著者不明') {
             if (author && author !== '著者不明') {
@@ -628,6 +633,19 @@ function cleanAuthorName(author) {
   // Format whitespace
   clean = clean.trim().replace(/\s+/g, ' ');
   return clean;
+}
+
+// Clean up series names to filter out publishing imprints/labels and keep only actual work series
+function cleanSeriesName(series) {
+  if (!series) return '';
+  const sUpper = series.toUpperCase();
+  // If it's just a generic publisher imprint/label, ignore it for title/work grouping
+  const genericImprints = ['文庫', '新書', '選書', 'コミック', 'COMICS', '学術文庫', '学芸文庫', '選集', '全集', 'ブックス', 'BOOKS', 'ノベルス', 'NOVELS'];
+  const isGeneric = genericImprints.some(imp => sUpper.includes(imp));
+  if (isGeneric) {
+    return '';
+  }
+  return series.trim();
 }
 
 // Format publication date
@@ -1000,11 +1018,30 @@ function sortBooks(books, rule) {
       const authComp = authA.localeCompare(authB, 'ja');
       if (authComp !== 0) return authComp;
       
-      // 3. Natural title sorting (groups series together)
+      // 3. Series grouping (if series is available)
+      const seriesA = a.series || '';
+      const seriesB = b.series || '';
+      if (seriesA && seriesB) {
+        const seriesComp = seriesA.localeCompare(seriesB, 'ja');
+        if (seriesComp !== 0) return seriesComp;
+        
+        // If same series, sort chronologically by release date to keep sequence
+        const dateA = parseReleaseDate(a.release);
+        const dateB = parseReleaseDate(b.release);
+        if (dateA !== dateB) {
+          return dateA - dateB;
+        }
+      } else if (seriesA && !seriesB) {
+        return -1; // Group series at the top of the author's section
+      } else if (!seriesA && seriesB) {
+        return 1;
+      }
+      
+      // 4. Natural title sorting (groups series together)
       const titleComp = compareTitlesNaturally(a.title, b.title);
       if (titleComp !== 0) return titleComp;
       
-      // 4. Chronological Release Date fallback
+      // 5. Chronological Release Date fallback
       const dateA = parseReleaseDate(a.release);
       const dateB = parseReleaseDate(b.release);
       return dateA - dateB;
@@ -1019,11 +1056,30 @@ function sortBooks(books, rule) {
       const authComp = authA.localeCompare(authB, 'ja');
       if (authComp !== 0) return authComp;
       
-      // 2. Natural title sorting (groups series together)
+      // 2. Series grouping (if series is available)
+      const seriesA = a.series || '';
+      const seriesB = b.series || '';
+      if (seriesA && seriesB) {
+        const seriesComp = seriesA.localeCompare(seriesB, 'ja');
+        if (seriesComp !== 0) return seriesComp;
+        
+        // If same series, sort chronologically by release date to keep sequence
+        const dateA = parseReleaseDate(a.release);
+        const dateB = parseReleaseDate(b.release);
+        if (dateA !== dateB) {
+          return dateA - dateB;
+        }
+      } else if (seriesA && !seriesB) {
+        return -1; // Group series at the top of the author's section
+      } else if (!seriesA && seriesB) {
+        return 1;
+      }
+      
+      // 3. Natural title sorting (groups series together)
       const titleComp = compareTitlesNaturally(a.title, b.title);
       if (titleComp !== 0) return titleComp;
       
-      // 3. Chronological Release Date fallback
+      // 4. Chronological Release Date fallback
       const dateA = parseReleaseDate(a.release);
       const dateB = parseReleaseDate(b.release);
       return dateA - dateB;
