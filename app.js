@@ -1202,15 +1202,7 @@ function sortBooks(books, rule) {
       const authComp = authA.localeCompare(authB, 'ja');
       if (authComp !== 0) return authComp;
       
-      // 2. Publisher grouping within the same author (to keep Kono Yutaka Kadokawa vs Shinchosha clean)
-      const pubA = normalizePublisher(a.publisher);
-      const pubB = normalizePublisher(b.publisher);
-      if (pubA === '不明' && pubB !== '不明') return 1;
-      if (pubB === '不明' && pubA !== '不明') return -1;
-      const pubComp = pubA.localeCompare(pubB, 'ja');
-      if (pubComp !== 0) return pubComp;
-      
-      // 3. Series grouping (if series is available)
+      // 2. Series grouping (if series is available) - Prioritized over publisher to prevent "publisher unknown" split
       const seriesA = a.series || '';
       const seriesB = b.series || '';
       if (seriesA && seriesB) {
@@ -1233,9 +1225,18 @@ function sortBooks(books, rule) {
           return dateA - dateB;
         }
       } else if (seriesA && !seriesB) {
-        return -1; // Group series at the top of the author/publisher section
+        return -1; // Group series at the top of the author's section
       } else if (!seriesA && seriesB) {
         return 1;
+      } else {
+        // 3. Publisher grouping (ONLY for non-series standalone titles to keep imprints clean)
+        const pubA = normalizePublisher(a.publisher);
+        const pubB = normalizePublisher(b.publisher);
+        if (pubA !== pubB) {
+          if (pubA === '不明') return 1;
+          if (pubB === '不明') return -1;
+          return pubA.localeCompare(pubB, 'ja');
+        }
       }
       
       // 4. Natural title sorting (groups series together)
