@@ -444,27 +444,32 @@ function extractCCode(item) {
 
 // Batch enrich book authors and publish dates using OpenBD API
 async function enrichBookMetadata() {
-  // Convert all ASINs (ISBN-10) to ISBN-13
+  // Convert all numeric ASINs (ISBN-10) to ISBN-13 for OpenBD
   const isbnMap = {};
   state.books.forEach(book => {
     if (book.asin && book.asin !== '不明') {
       const isbn13 = convertISBN10to13(book.asin);
-      isbnMap[isbn13] = book;
+      // Valid numeric ISBN-13 check
+      if (/^97[89][0-9]{10}$/.test(isbn13)) {
+        isbnMap[isbn13] = book;
+      }
     }
   });
 
   const isbn13s = Object.keys(isbnMap);
-  if (isbn13s.length === 0) return;
+  let enrichedCount = 0;
 
-  elements.chatStatus.textContent = '書籍詳細情報を取得中...';
-  console.log(`Enriching metadata for ${isbn13s.length} books via OpenBD...`);
+  // 1. Run OpenBD Batch query first (if any valid numeric ISBNs exist)
+  if (isbn13s.length > 0) {
+    elements.chatStatus.textContent = '書籍詳細情報を取得中...';
+    console.log(`Enriching metadata for ${isbn13s.length} books via OpenBD...`);
 
-  // Split into chunks of 100 to avoid URL length limits
-  const chunkSize = 100;
-  const chunks = [];
-  for (let i = 0; i < isbn13s.length; i += chunkSize) {
-    chunks.push(isbn13s.slice(i, i + chunkSize));
-  }
+    // Split into chunks of 100 to avoid URL length limits
+    const chunkSize = 100;
+    const chunks = [];
+    for (let i = 0; i < isbn13s.length; i += chunkSize) {
+      chunks.push(isbn13s.slice(i, i + chunkSize));
+    }
 
   try {
     const promises = chunks.map(async (chunk) => {
@@ -607,73 +612,87 @@ async function enrichBookMetadata() {
       }
     });
 
-    // 2. Identify books still missing publisher or author, and query Google Books API as a fallback
-    const missingBooks = state.books.filter(b => b.publisher === '不明' || b.author === '著者不明');
-    if (missingBooks.length > 0) {
-      console.log(`Querying Google Books API for ${missingBooks.length} remaining/missing books...`);
-      elements.chatStatus.textContent = '不足している書籍情報を検索中...';
-      
-      const booksToQuery = missingBooks.slice(0, 30);
-      const googlePromises = booksToQuery.map(async (book) => {
-        let query = '';
-        const cleanTitle = book.title.replace(/（[^）]+）|\([^)]+\)|〈[^〉]+〉/g, '').trim();
-        const cleanAuth = book.author && book.author !== '著者不明' ? book.author : '';
+      console.log(`Successfully enriched author/publisher info for ${enrichedCount} books via OpenBD.`);
+    } catch (error) {
+      console.warn('OpenBD metadata enrichment failed:', error);
+    }
+  }
 
-        if (book.asin && /^[0-9]{10,13}$/.test(convertISBN10to13(book.asin))) {
-          const isbn13 = convertISBN10to13(book.asin);
-          query = `isbn:${isbn13}`;
+  // 2. Query Google Books API as a fallback for STILL missing books
+  const missingBooks = state.books.filter(b => b.publisher === '不明' || b.author === '著者不明');
+  if (missingBooks.length > 0) {
+    console.log(`Querying Google Books API for ${missingBooks.length} remaining/missing books...`);
+    elements.chatStatus.textContent = '不足している書籍情報を検索中...';
+    
+    // Concurrency / Rate-limit protection: query up to 20 books sequentially with a 200ms delay
+    const booksToQuery = missingBooks.slice(0, 20);
+    for (const book of booksToQuery) {
+      let query = '';
+      const cleanTitle = book.title.replace(/（[^）]+）|\([^)]+\)|〈[^〉]+〉/g, '').trim();
+      const cleanAuth = book.author && book.author !== '著者不明' ? book.author : '';
+
+      const numericAsin = convertISBN10to13(book.asin);
+      if (book.asin && book.asin !== '不明' && /^97[89][0-9]{10}$/.test(numericAsin)) {
+        query = `isbn:${numericAsin}`;
+      } else {
+        if (cleanAuth) {
+          query = `intitle:${encodeURIComponent(cleanTitle)}+inauthor:${encodeURIComponent(cleanAuth)}`;
         } else {
-          if (cleanAuth) {
-            query = `intitle:${encodeURIComponent(cleanTitle)}+inauthor:${encodeURIComponent(cleanAuth)}`;
-          } else {
-            query = `intitle:${encodeURIComponent(cleanTitle)}`;
-          }
+          query = `intitle:${encodeURIComponent(cleanTitle)}`;
         }
+      }
 
-        const url = `https://www.googleapis.com/books/v1/volumes?q=${query}&maxResults=3`;
-        try {
-          const response = await fetchWithTimeout(url, { timeout: 4000 });
-          if (response.ok) {
-            const data = await response.json();
-            if (data && data.items && data.items.length > 0) {
-              const info = data.items[0].volumeInfo;
-              if (info) {
-                if (book.publisher === '不明' && info.publisher) {
-                  book.publisher = info.publisher;
-                }
-                if (book.author === '著者不明' && info.authors && info.authors.length > 0) {
-                  book.author = cleanAuthorName(info.authors.join(' '));
-                }
-                if (book.release === '不明' && info.publishedDate) {
-                  book.release = formatPubDate(info.publishedDate.replace(/-/g, ''));
-                }
-                if (book.image.includes('placeholder') && info.imageLinks?.thumbnail) {
-                  book.image = info.imageLinks.thumbnail.replace('http://', 'https://');
-                }
-                console.log(`[Google Books API] Enriched "${book.title}" -> Pub: ${book.publisher}, Auth: ${book.author}`);
+      const url = `https://www.googleapis.com/books/v1/volumes?q=${query}&maxResults=3`;
+      try {
+        // Delay to prevent hitting Google Books rate limits (403/429)
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
+        const response = await fetchWithTimeout(url, { timeout: 4000 });
+        if (response.ok) {
+          const data = await response.json();
+          if (data && data.items && data.items.length > 0) {
+            const info = data.items[0].volumeInfo;
+            if (info) {
+              if (book.publisher === '不明' && info.publisher) {
+                book.publisher = info.publisher;
               }
+              if (book.author === '著者不明' && info.authors && info.authors.length > 0) {
+                book.author = cleanAuthorName(info.authors.join(' '));
+              }
+              if (book.release === '不明' && info.publishedDate) {
+                book.release = formatPubDate(info.publishedDate.replace(/-/g, ''));
+              }
+              if (book.image.includes('placeholder') && info.imageLinks?.thumbnail) {
+                book.image = info.imageLinks.thumbnail.replace('http://', 'https://');
+              }
+              
+              if (book.category === 'book' || book.category === '一般書') {
+                const pubUpper = (book.publisher || '').toUpperCase();
+                const titleUpper = (book.title || '').toUpperCase();
+                const authorUpper = (book.author || '').toUpperCase();
+                const novelists = ['中島敦', '太宰治', '芥川龍之介', '夏目漱石', '森鴎外', '川端康成', '三島由紀夫', '梶井基次郎', '江戸川乱歩', '坂口安吾', '有島武郎', '芥川竜之介', '辻村深月', '村上春樹', '東野圭吾', '伊坂幸太郎', '宮部みゆき', '湊かなえ', '有川浩', '朝井リョウ', '住野よる', '米澤穂信', '西尾西', '西尾維新', '西尾', '綾辻行人', '新海誠', '知念実希人', '瀬尾まいこ', '重松清', '小野不由美', '宮下奈都', '三浦しをん', '池井戸潤', '川村元気', '誉田哲也', '星新一', '夏川草介', '原田マハ', '森見登美彦', '万城目学', '中村文則', '又吉直樹', '薬丸岳', '横山秀夫'];
+                const isKnownNovelist = novelists.some(auth => authorUpper.includes(auth.toUpperCase()));
+                const literaryPublishers = ['新潮社', '講談社', '集英社', '文藝春秋', '幻冬舎', 'ポプラ社', '双葉社', '角川', 'KADOKAWA', '徳間書店', '光文社', '早川書房', '東京創元社', '文春', '実業之日本社', 'ポプラ文庫', '宝島社', 'サンマーク出版', '中央公論新社', '中央公論', '飛鳥新社', '祥伝社'];
+                const isLiteraryPublisher = literaryPublishers.some(pub => pubUpper.includes(pub));
+                
+                if (isKnownNovelist || isLiteraryPublisher) {
+                  book.category = 'novel';
+                }
+              }
+              console.log(`[Google Books API] Enriched "${book.title}" -> Pub: ${book.publisher}, Auth: ${book.author}`);
             }
           }
-        } catch (err) {
-          console.warn(`Google Books API fallback failed for "${book.title}":`, err);
         }
-      });
-      
-      await Promise.all(googlePromises);
+      } catch (err) {
+        console.warn(`Google Books API fallback failed for "${book.title}":`, err);
+      }
     }
-
-    console.log(`Successfully enriched author/publisher info for ${enrichedCount} books.`);
-    elements.chatStatus.textContent = `${state.books.length}冊の本棚データを同期完了`;
-    
-    // Re-sort the books based on the newly loaded publisher metadata!
-    state.books = sortBooks(state.books, state.currentSortRule);
-    
-    // Re-render bookshelf with newly loaded details
-    filterAndRenderBooks();
-  } catch (error) {
-    console.warn('Metadata enrichment failed:', error);
-    elements.chatStatus.textContent = `${state.books.length}冊の本棚データを同期完了`;
   }
+
+  // 3. Finalize and trigger sorting & rendering
+  elements.chatStatus.textContent = `${state.books.length}冊の本棚データを同期完了`;
+  state.books = sortBooks(state.books, state.currentSortRule);
+  filterAndRenderBooks();
 }
 
 // Clean up author names (removing life years, stripping commas in names, and cleaning whitespaces)
@@ -1564,3 +1583,4 @@ function switchMobileTab(tab) {
     elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
   }
 }
+
