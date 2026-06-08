@@ -318,7 +318,7 @@ async function fetchBooklogData() {
           if (book.url) {
             const parts = book.url.split('/');
             const lastPart = parts[parts.length - 1];
-            if (lastPart && /^[0-9Xx]{10,13}$/.test(lastPart)) {
+            if (lastPart && /^[0-9Xx]{10,13}$|^[Bb]0[0-9A-Za-z]{8}$/.test(lastPart)) {
               asin = lastPart;
             }
           }
@@ -606,6 +606,61 @@ async function enrichBookMetadata() {
         }
       }
     });
+
+    // 2. Identify books still missing publisher or author, and query Google Books API as a fallback
+    const missingBooks = state.books.filter(b => b.publisher === '不明' || b.author === '著者不明');
+    if (missingBooks.length > 0) {
+      console.log(`Querying Google Books API for ${missingBooks.length} remaining/missing books...`);
+      elements.chatStatus.textContent = '不足している書籍情報を検索中...';
+      
+      const booksToQuery = missingBooks.slice(0, 30);
+      const googlePromises = booksToQuery.map(async (book) => {
+        let query = '';
+        const cleanTitle = book.title.replace(/（[^）]+）|\([^)]+\)|〈[^〉]+〉/g, '').trim();
+        const cleanAuth = book.author && book.author !== '著者不明' ? book.author : '';
+
+        if (book.asin && /^[0-9]{10,13}$/.test(convertISBN10to13(book.asin))) {
+          const isbn13 = convertISBN10to13(book.asin);
+          query = `isbn:${isbn13}`;
+        } else {
+          if (cleanAuth) {
+            query = `intitle:${encodeURIComponent(cleanTitle)}+inauthor:${encodeURIComponent(cleanAuth)}`;
+          } else {
+            query = `intitle:${encodeURIComponent(cleanTitle)}`;
+          }
+        }
+
+        const url = `https://www.googleapis.com/books/v1/volumes?q=${query}&maxResults=3`;
+        try {
+          const response = await fetchWithTimeout(url, { timeout: 4000 });
+          if (response.ok) {
+            const data = await response.json();
+            if (data && data.items && data.items.length > 0) {
+              const info = data.items[0].volumeInfo;
+              if (info) {
+                if (book.publisher === '不明' && info.publisher) {
+                  book.publisher = info.publisher;
+                }
+                if (book.author === '著者不明' && info.authors && info.authors.length > 0) {
+                  book.author = cleanAuthorName(info.authors.join(' '));
+                }
+                if (book.release === '不明' && info.publishedDate) {
+                  book.release = formatPubDate(info.publishedDate.replace(/-/g, ''));
+                }
+                if (book.image.includes('placeholder') && info.imageLinks?.thumbnail) {
+                  book.image = info.imageLinks.thumbnail.replace('http://', 'https://');
+                }
+                console.log(`[Google Books API] Enriched "${book.title}" -> Pub: ${book.publisher}, Auth: ${book.author}`);
+              }
+            }
+          }
+        } catch (err) {
+          console.warn(`Google Books API fallback failed for "${book.title}":`, err);
+        }
+      });
+      
+      await Promise.all(googlePromises);
+    }
 
     console.log(`Successfully enriched author/publisher info for ${enrichedCount} books.`);
     elements.chatStatus.textContent = `${state.books.length}冊の本棚データを同期完了`;
