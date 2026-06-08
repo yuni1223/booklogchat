@@ -907,6 +907,81 @@ function parseReleaseDate(releaseStr) {
 }
 
 // Constants for Roman numerals and special volume designations
+const SERIES_VOLUME_MAP = {
+  '〈物語〉シリーズ': [
+    '化物語(上)',
+    '化物語(下)',
+    '傷物語',
+    '偽物語(上)',
+    '偽物語(下)',
+    '猫物語(黒)',
+    '猫物語(白)',
+    '傾物語',
+    '花物語',
+    '囮物語',
+    '鬼物語',
+    '恋物語',
+    '憑物語',
+    '暦物語',
+    '終物語(上)',
+    '終物語(中)',
+    '終物語(下)',
+    '続・終物語',
+    '愚物語',
+    '業物語',
+    '撫物語',
+    '結物語',
+    '忍物語',
+    '宵物語',
+    '余物語',
+    '扇物語',
+    '死物語(上)',
+    '死物語(下)',
+    '戦物語'
+  ],
+  '掟上今日子シリーズ': [
+    '掟上今日子の備忘録',
+    '掟上今日子の推薦文',
+    '掟上今日子の挑戦状',
+    '掟上今日子の遺言書',
+    '掟上今日子の退職願',
+    '掟上今日子の婚姻届',
+    '掟上今日子の家計簿',
+    '掟上今日子の旅行記',
+    '掟上今日子の裏表紙',
+    '掟上今日子の色見本',
+    '掟上今日子の乗車券',
+    '掟上今日子の設計図',
+    '掟上今日子の忍法帖',
+    '掟上今日子の鑑賞マニュアル',
+    '掟上今日子の記述問題'
+  ],
+  '階段島シリーズ': [
+    'いなくなれ、群青',
+    'その白さえ嘘だとしても',
+    '汚れた赤を恋と呼ぶんだ',
+    '凶器は壊れた黒の叫び',
+    '夜空の底は深く濃い青',
+    'きみの世界に、青が降る'
+  ]
+};
+
+function getSeriesVolumeIndex(seriesName, title) {
+  if (!seriesName || !title) return Infinity;
+  const volumes = SERIES_VOLUME_MAP[seriesName];
+  if (!volumes) return Infinity;
+
+  const normTitle = normalizeForComparison(title);
+
+  for (let i = 0; i < volumes.length; i++) {
+    const normVol = normalizeForComparison(volumes[i]);
+    if (normTitle.includes(normVol)) {
+      return i;
+    }
+  }
+  return Infinity;
+}
+
 const ROMAN_NUMERALS = {
   'I': 1, 'II': 2, 'III': 3, 'IV': 4, 'V': 5, 'VI': 6, 'VII': 7, 'VIII': 8, 'IX': 9, 'X': 10,
   'XI': 11, 'XII': 12, 'XIII': 13, 'XIV': 14, 'XV': 15, 'XVI': 16, 'XVII': 17, 'XVIII': 18, 'XIX': 19, 'XX': 20,
@@ -1087,6 +1162,15 @@ function sortBooks(books, rule) {
         const seriesComp = seriesA.localeCompare(seriesB, 'ja');
         if (seriesComp !== 0) return seriesComp;
         
+        // Sort by series volume dictionary index first
+        const idxA = getSeriesVolumeIndex(seriesA, a.title);
+        const idxB = getSeriesVolumeIndex(seriesB, b.title);
+        if (idxA !== Infinity || idxB !== Infinity) {
+          if (idxA !== idxB) {
+            return idxA - idxB;
+          }
+        }
+        
         // If same series, sort chronologically by release date to keep sequence
         const dateA = parseReleaseDate(a.release);
         const dateB = parseReleaseDate(b.release);
@@ -1118,12 +1202,29 @@ function sortBooks(books, rule) {
       const authComp = authA.localeCompare(authB, 'ja');
       if (authComp !== 0) return authComp;
       
-      // 2. Series grouping (if series is available)
+      // 2. Publisher grouping within the same author (to keep Kono Yutaka Kadokawa vs Shinchosha clean)
+      const pubA = normalizePublisher(a.publisher);
+      const pubB = normalizePublisher(b.publisher);
+      if (pubA === '不明' && pubB !== '不明') return 1;
+      if (pubB === '不明' && pubA !== '不明') return -1;
+      const pubComp = pubA.localeCompare(pubB, 'ja');
+      if (pubComp !== 0) return pubComp;
+      
+      // 3. Series grouping (if series is available)
       const seriesA = a.series || '';
       const seriesB = b.series || '';
       if (seriesA && seriesB) {
         const seriesComp = seriesA.localeCompare(seriesB, 'ja');
         if (seriesComp !== 0) return seriesComp;
+        
+        // Sort by series volume dictionary index first
+        const idxA = getSeriesVolumeIndex(seriesA, a.title);
+        const idxB = getSeriesVolumeIndex(seriesB, b.title);
+        if (idxA !== Infinity || idxB !== Infinity) {
+          if (idxA !== idxB) {
+            return idxA - idxB;
+          }
+        }
         
         // If same series, sort chronologically by release date to keep sequence
         const dateA = parseReleaseDate(a.release);
@@ -1132,16 +1233,16 @@ function sortBooks(books, rule) {
           return dateA - dateB;
         }
       } else if (seriesA && !seriesB) {
-        return -1; // Group series at the top of the author's section
+        return -1; // Group series at the top of the author/publisher section
       } else if (!seriesA && seriesB) {
         return 1;
       }
       
-      // 3. Natural title sorting (groups series together)
+      // 4. Natural title sorting (groups series together)
       const titleComp = compareTitlesNaturally(a.title, b.title);
       if (titleComp !== 0) return titleComp;
       
-      // 4. Chronological Release Date fallback
+      // 5. Chronological Release Date fallback
       const dateA = parseReleaseDate(a.release);
       const dateB = parseReleaseDate(b.release);
       return dateA - dateB;
