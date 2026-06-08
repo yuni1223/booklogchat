@@ -689,7 +689,15 @@ async function enrichBookMetadata() {
     }
   }
 
-  // 3. Finalize and trigger sorting & rendering
+  // 3. Re-resolve series names for all books using fully enriched metadata (fixes missing series on late-enriched items)
+  state.books.forEach(book => {
+    const resolved = resolveBookSeries(book, book.series);
+    if (resolved) {
+      book.series = resolved;
+    }
+  });
+
+  // 4. Finalize and trigger sorting & rendering
   elements.chatStatus.textContent = `${state.books.length}冊の本棚データを同期完了`;
   state.books = sortBooks(state.books, state.currentSortRule);
   filterAndRenderBooks();
@@ -727,8 +735,8 @@ function resolveBookSeries(book, rawSeries) {
     'その白さえ嘘だとしても',
     '汚れた赤を恋と呼ぶんだ',
     '凶器は壊れた黒の叫び',
-    '夜空の底は深く濃い青',
-    'きみの世界に、青が降る'
+    '夜空の呪いに色はない',
+    'きみの世界に、青が鳴る'
   ];
   if (authorUpper.includes('河野裕') && kaidanTitles.some(t => title.includes(t))) {
     return '階段島シリーズ';
@@ -1026,17 +1034,17 @@ const SERIES_VOLUME_MAP = {
     '掟上今日子の色見本',
     '掟上今日子の乗車券',
     '掟上今日子の設計図',
+    '掟上今日子の鑑札票',
     '掟上今日子の忍法帖',
-    '掟上今日子の鑑賞マニュアル',
-    '掟上今日子の記述問題'
+    '掟上今日子の保険証'
   ],
   '階段島シリーズ': [
     'いなくなれ、群青',
     'その白さえ嘘だとしても',
     '汚れた赤を恋と呼ぶんだ',
     '凶器は壊れた黒の叫び',
-    '夜空の底は深く濃い青',
-    'きみの世界に、青が降る'
+    '夜空の呪いに色はない',
+    'きみの世界に、青が鳴る'
   ]
 };
 
@@ -1076,8 +1084,8 @@ function normalizeForComparison(str) {
   // Standardize all forms of Japanese/English hyphens, dashes and waves to a simple half-width '-'
   normalized = normalized.replace(/[\u2010-\u2015\u2212\uFF0D\u30FC\u301C\uFF5E]/g, '-');
   
-  // Strip parentheses and brackets for structural comparison equality
-  normalized = normalized.replace(/[（）()［］\[\]〈〉<>《》]/g, ' ');
+  // Strip punctuation, commas, dots, colons, brackets, and parentheses to prevent sorting splits on spacing/punctuation mismatches
+  normalized = normalized.replace(/[、。，,．.：（）()［］\[\]〈〉<>《》“”"'`]/g, ' ');
   
   // Clean up excessive spacing
   return normalized.replace(/\s+/g, ' ').trim();
