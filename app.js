@@ -645,7 +645,7 @@ async function enrichBookMetadata() {
       const url = `https://www.googleapis.com/books/v1/volumes?q=${query}&maxResults=3`;
       try {
         // Delay to prevent hitting Google Books rate limits (403/429)
-        await new Promise(resolve => setTimeout(resolve, 200));
+        await new Promise(resolve => setTimeout(resolve, 100));
         
         const response = await fetchWithTimeout(url, { timeout: 4000 });
         if (response.ok) {
