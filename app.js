@@ -1000,15 +1000,14 @@ function sortBooks(books, rule) {
       const authComp = authA.localeCompare(authB, 'ja');
       if (authComp !== 0) return authComp;
       
-      // 3. Chronological Release Date
+      // 3. Natural title sorting (groups series together)
+      const titleComp = compareTitlesNaturally(a.title, b.title);
+      if (titleComp !== 0) return titleComp;
+      
+      // 4. Chronological Release Date fallback
       const dateA = parseReleaseDate(a.release);
       const dateB = parseReleaseDate(b.release);
-      if (dateA !== dateB) {
-        return dateA - dateB;
-      }
-      
-      // 4. Natural title sorting fallback
-      return compareTitlesNaturally(a.title, b.title);
+      return dateA - dateB;
     });
   } else if (rule === 'author') {
     sorted.sort((a, b) => {
@@ -1020,15 +1019,14 @@ function sortBooks(books, rule) {
       const authComp = authA.localeCompare(authB, 'ja');
       if (authComp !== 0) return authComp;
       
-      // 2. Chronological Release Date
+      // 2. Natural title sorting (groups series together)
+      const titleComp = compareTitlesNaturally(a.title, b.title);
+      if (titleComp !== 0) return titleComp;
+      
+      // 3. Chronological Release Date fallback
       const dateA = parseReleaseDate(a.release);
       const dateB = parseReleaseDate(b.release);
-      if (dateA !== dateB) {
-        return dateA - dateB;
-      }
-      
-      // 3. Natural title sorting fallback
-      return compareTitlesNaturally(a.title, b.title);
+      return dateA - dateB;
     });
   } else if (rule === 'title') {
     sorted.sort((a, b) => {
