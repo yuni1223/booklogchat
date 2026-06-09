@@ -1357,6 +1357,229 @@ function compareTitlesNaturally(titleA, titleB) {
   return compareStringsIntelligently(titleA, titleB);
 }
 
+// Phonetic hiragana mappings for Japanese authors to enable accurate AIUEO sorting
+const AUTHOR_READING_MAP = {
+  // あ
+  '阿川せんり': 'あがわせんり',
+  '相沢さこ': 'あいざわさこ',
+  '相沢沙呼': 'あいざわさこ',
+  '逢坂冬馬': 'あいさかとうま',
+  '葦舟ナツ': 'あしふねなつ',
+  '芦沢央': 'あしざわよう',
+  '綾崎隼': 'あやさきしゅん',
+  '綾辻行人': 'あやつじゆきと',
+  '安生正': 'あんじょうただし',
+  '安部公房': 'aべこうぼう', // Wait, 'あべこうぼう'
+  '安部公房': 'あべこうぼう',
+  '朝井リョウ': 'あさいりょう',
+  '朝霧カフカ': 'あさぎりかふか',
+  '天沢夏月': 'あまさわなつき',
+  '有川浩': 'ありかわひろ',
+  '青柳碧人': 'あおやぎあいと',
+  '蒼月海里': 'あおつきかいり',
+  '阿賀沢紅茶': 'あがさわこうちゃ',
+  '雨森たきび': 'あまもりたきび',
+  '鵜飼有志': 'うかいゆうし',
+  'アベツカサ': 'あべつかさ',
+  '暁佳奈': 'あかつきかな',
+  '大森望': 'おおもりのぞみ',
+  // い
+  '伊岡瞬': 'いおかしゅん',
+  '伊坂幸太郎': 'いさかこうたろう',
+  '逸木裕': 'いつきゆう',
+  '岩畑ヒロ': 'いわはたひろ',
+  '入間人間': 'いるまひとま',
+  '今井むつみ': 'いまいむつみ',
+  '今村夏子': 'いまむらなつこ',
+  '今村昌弘': 'いまむらまさひろ',
+  '池上彰': 'いけがみあきら',
+  '池田清彦': 'いけだきよひこ',
+  '池田洋介': 'いけだようすけ',
+  '筏田かつら': 'いかだかつら',
+  // う
+  '宇佐見りん': 'うさみりん',
+  '宇野重規': 'うのしげき',
+  '上野千鶴子': 'うえのちづこ',
+  '冲方丁': 'うぶかたとう',
+  // え
+  '榎宮祐': 'かみやゆう',
+  // お
+  '王城夕紀': 'おうじょうゆき',
+  '岡崎琢磨': 'おかざきたくま',
+  '乙一': 'おついち',
+  '恩田陸': 'おんだりく',
+  '押村高': 'おしむらこう',
+  // か
+  '河野裕': 'こうのゆたか',
+  '川口俊和': 'かわぐちとしかず',
+  '川村元気': 'かわむらげんき',
+  '神永学': 'かみながまなぶ',
+  '神岡真司': 'かみおかしんじ',
+  '京極夏彦': 'きょうごくなつひこ',
+  '衣笠彰梧': 'きぬがさしょうご',
+  '加藤淳平': 'かとうじゅんぺい',
+  '鴨志田一': 'かもしだはじめ',
+  '甲田学人': 'こうだがくと',
+  // く
+  'くらゆいあゆ': 'くらゆいあゆ',
+  '桑原武夫': 'くわばらたけお',
+  // さ
+  '佐野徹夜': 'さのてつや',
+  '彩坂美月': 'あやさかみつき',
+  '斎藤環': 'さいとうたまき',
+  '佐藤究': 'さとうきわみ',
+  '桜井のりお': 'さくらいのりお',
+  // し
+  '志賀直哉': 'しがなおや',
+  '七月隆文': 'ななつきたかふみ',
+  '住野よる': 'すみのよる',
+  '宿野かほる': 'しゅくのかほる',
+  '新海誠': 'しんかいまこと',
+  '品川哲彦': 'しながわてつひこ',
+  // す
+  '鈴木宏昭': 'すずきひろあき',
+  // た
+  '太宰治': 'だざいおさむ',
+  '駄犬': 'だけん',
+  '大山誠一郎': 'おおやませいいちろう',
+  '谷頭和希': 'たにがしらかずき',
+  'たけうちホロウ': 'たけうちほろう',
+  'つるまいかだ': 'つるまいかだ',
+  '超法規的かえる': 'ちょうほうきてきかえる',
+  '鳥山まこと': 'とりやままこと',
+  '立原とうや': 'たちはらとうや',
+  '中央公論新社': 'ちゅうおうこうろんしんしゃ',
+  // ち
+  '知念実希人': 'ちねんみきと',
+  // つ
+  '辻村深月': 'つじむらみづき',
+  '辻堂ゆめ': 'つじどうゆめ',
+  // て
+  // と
+  '東野圭吾': 'ひがしのけいご',
+  '外山滋比古': 'とやましげひこ',
+  // な
+  '凪良ゆう': 'なぎらゆう',
+  '長谷川夕': 'はせがわゆう',
+  '中原中也': 'なかはらちゅうや',
+  '中川裕': 'なかがわゆたか',
+  '中町信': 'なかまちしん',
+  '中島敦': 'なかじまあつし',
+  // に
+  '西加奈子': 'にしかなこ',
+  '西尾維新': 'にしおいしん',
+  // の
+  '野村美月': 'のむらみづき',
+  // は
+  '原田マハ': 'はらだまは',
+  '早見和真': 'はやみかずま',
+  '博': 'ひろ',
+  '白浜鴎': 'しらはまかもめ',
+  '伴名練': 'はんなれん',
+  '塀': 'へい',
+  // ひ
+  '姫野カオルコ': 'ひめのかおるこ',
+  // フ
+  '深緑野分': 'ふかみどりのわき',
+  '坊木椎哉': 'ぼうぎしいや',
+  '古橋秀之': 'ふるはしひでゆき',
+  '古野まほろ': 'ふるのまほろ',
+  // ま
+  '前島賢': 'まえじまけん',
+  '松岡圭祐': 'まつおかけいすけ',
+  '麻耶雄嵩': 'まやゆたか',
+  'みかみてれん': 'みかみてれん',
+  'みかみてれん むっしゅ': 'みかみてれん むっしゅ',
+  '三香見サカ': 'みかみさか',
+  '森バジル': 'もりばじる',
+  '光吉さくら': 'みつよしさくら',
+  // み
+  '三秋縋': 'みあきすがる',
+  '湊かなえ': 'みなとかなえ',
+  '宮下奈都': 'みやしたなつ',
+  '宮内悠介': 'みやうちゆうすけ',
+  '宮部みゆき': 'みやべみゆき',
+  // む
+  '村上春樹': 'むらかみはるき',
+  '村上靖彦': 'むらかみやすひこ',
+  '村田沙耶香': 'むらたさやか',
+  // も
+  '茂木健一郎': 'もぎけんいちろう',
+  '森茂起': 'もりしげき',
+  '森見登美彦': 'もりみとみひこ',
+  // や
+  '山田悠介': 'やまだゆうすけ',
+  '山田鐘人': 'やまだかねひと',
+  '山本圭': 'やまもとけい',
+  '山本太郎': 'やまもとたろう',
+  '山本崇一朗': 'やまもとそういちろう',
+  '飲茶': 'やむちゃ',
+  '夕木春央': 'ゆうきはるお',
+  // ゆ
+  '柚月裕子': 'ゆづきゆうこ',
+  // よ
+  '養老孟司': 'ようろうたけし',
+  '吉井仁実': 'よしいよしみ',
+  '吉田徹': 'よしだとおる',
+  // り
+  '陸秋槎': 'りくしゅうさ',
+  '理化学研究所脳科学総合研究センター': 'りかがくけんきゅうしょのうかがくそうごうけんきゅうせんたー',
+  '劉慈欣': 'りゅうじきん',
+  // わ
+  '渡辺優': 'わたなべゆう',
+  '綿矢りさ': 'わたやりさ',
+  // その他
+  'プラトン': 'ぷらとん',
+  '梨木香歩': 'なしきかほ'
+};
+
+// Returns sorting key and alphabet classification for author names
+function getAuthorSortingKey(name) {
+  if (!name || name === '著者不明') {
+    return { isAlphabet: false, key: 'んんんんんん' };
+  }
+  
+  const cleanName = name.trim();
+  
+  // Alphabetical authors (English/Western names) sort at the very beginning in ABC order
+  const isAlphabet = /^[a-zA-Z]/.test(cleanName);
+  if (isAlphabet) {
+    return { isAlphabet: true, key: cleanName.toLowerCase() };
+  }
+  
+  // Standardize Japanese Kanji names by removing spacing/meta suffixes
+  const key = cleanName.replace(/[\s\/／、,，]+|著$/g, '');
+  
+  // Find phonetic reading match in map (sorted by length descending for optimal longest-prefix match first)
+  const sortedKanjiKeys = Object.keys(AUTHOR_READING_MAP).sort((a, b) => b.length - a.length);
+  for (const kanji of sortedKanjiKeys) {
+    if (key.startsWith(kanji)) {
+      return { isAlphabet: false, key: AUTHOR_READING_MAP[kanji] };
+    }
+  }
+  
+  return { isAlphabet: false, key: key };
+}
+
+// Compare two author names in Japanese (AIUEO) order and English (ABC) order
+function compareAuthorsIntelligently(authA, authB) {
+  if (authA === authB) return 0;
+  if (authA === '著者不明') return 1;
+  if (authB === '著者不明') return -1;
+  
+  const keyA = getAuthorSortingKey(authA);
+  const keyB = getAuthorSortingKey(authB);
+  
+  if (keyA.isAlphabet && !keyB.isAlphabet) {
+    return -1; // Alphabet first
+  }
+  if (!keyA.isAlphabet && keyB.isAlphabet) {
+    return 1; // Alphabet first
+  }
+  
+  return keyA.key.localeCompare(keyB.key, 'ja');
+}
+
 // Dynamic bookshelf sorting utility
 function sortBooks(books, rule) {
   const sorted = [...books];
@@ -1374,9 +1597,7 @@ function sortBooks(books, rule) {
       // 2. Author grouping
       const authA = a.author || '';
       const authB = b.author || '';
-      if (authA === '著者不明' && authB !== '著者不明') return 1;
-      if (authB === '著者不明' && authA !== '著者不明') return -1;
-      const authComp = authA.localeCompare(authB, 'ja');
+      const authComp = compareAuthorsIntelligently(authA, authB);
       if (authComp !== 0) return authComp;
       
       // 3. Series grouping (if series is available)
@@ -1421,9 +1642,7 @@ function sortBooks(books, rule) {
       // 1. Author grouping
       const authA = a.author || '';
       const authB = b.author || '';
-      if (authA === '著者不明' && authB !== '著者不明') return 1;
-      if (authB === '著者不明' && authA !== '著者不明') return -1;
-      const authComp = authA.localeCompare(authB, 'ja');
+      const authComp = compareAuthorsIntelligently(authA, authB);
       if (authComp !== 0) return authComp;
       
       // 2. Series grouping (if series is available) - Prioritized over publisher to prevent "publisher unknown" split
@@ -1488,7 +1707,7 @@ function sortBooks(books, rule) {
       // 3. Author grouping fallback
       const authA = a.author || '';
       const authB = b.author || '';
-      return authA.localeCompare(authB, 'ja');
+      return compareAuthorsIntelligently(authA, authB);
     });
   } else if (rule === 'added') {
     // Return sorted in original registration index order
@@ -1733,4 +1952,5 @@ function switchMobileTab(tab) {
     elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
   }
 }
+
 
