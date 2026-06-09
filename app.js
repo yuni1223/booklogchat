@@ -99,7 +99,52 @@ document.addEventListener('DOMContentLoaded', () => {
   try {
     const cachedData = localStorage.getItem(`booklog_cached_books_${state.username}`);
     if (cachedData) {
-      state.books = JSON.parse(cachedData);
+      let cachedBooks = JSON.parse(cachedData);
+      
+      // Recalculate categories for all loaded books to ensure latest categorization logic is applied
+      cachedBooks = cachedBooks.map(book => {
+        let finalCategory = book.category;
+        let classifiedViaCCode = false;
+        
+        // 1. Check if we have C-Code classification saved
+        if (book.cCode) {
+          const cCodeClean = book.cCode.replace(/^C/i, '');
+          if (cCodeClean.length === 4) {
+            const formatDigit = cCodeClean[1];
+            const genreCode = cCodeClean.substring(2);
+            const genreNum = parseInt(genreCode, 10);
+            
+            if (formatDigit === '9' || genreNum === 79) {
+              finalCategory = 'comic';
+            } else if (formatDigit === '2') {
+              finalCategory = 'shinsho';
+            } else if (genreNum >= 90 && genreNum <= 98) {
+              finalCategory = 'novel';
+            } else {
+              finalCategory = 'book';
+            }
+            classifiedViaCCode = true;
+          }
+        }
+        
+        // 2. If no C-Code, run determineBookCategory
+        if (!classifiedViaCCode) {
+          finalCategory = determineBookCategory(
+            book.title,
+            book.publisher || '不明',
+            book.series || '',
+            book.author,
+            'book'
+          );
+        }
+        
+        return {
+          ...book,
+          category: finalCategory
+        };
+      });
+      
+      state.books = cachedBooks;
       state.books = sortBooks(state.books, state.currentSortRule);
       filterAndRenderBooks();
       renderCategoryFilters();
@@ -408,15 +453,50 @@ async function fetchBooklogData() {
       });
 
       if (matched) {
+        // Recalculate category using the latest logic and enriched metadata
+        let finalCategory = book.category;
+        let classifiedViaCCode = false;
+        
+        if (matched.cCode) {
+          const cCodeClean = matched.cCode.replace(/^C/i, '');
+          if (cCodeClean.length === 4) {
+            const formatDigit = cCodeClean[1];
+            const genreCode = cCodeClean.substring(2);
+            const genreNum = parseInt(genreCode, 10);
+            
+            if (formatDigit === '9' || genreNum === 79) {
+              finalCategory = 'comic';
+            } else if (formatDigit === '2') {
+              finalCategory = 'shinsho';
+            } else if (genreNum >= 90 && genreNum <= 98) {
+              finalCategory = 'novel';
+            } else {
+              finalCategory = 'book';
+            }
+            classifiedViaCCode = true;
+          }
+        }
+        
+        if (!classifiedViaCCode) {
+          finalCategory = determineBookCategory(
+            book.title,
+            matched.publisher || '不明',
+            matched.series || book.series,
+            (matched.author && matched.author !== '著者不明') ? matched.author : book.author,
+            book.catalog || ''
+          );
+        }
+
         return {
           ...book,
           // Preserve enriched metadata
           publisher: matched.publisher || '不明',
           author: (matched.author && matched.author !== '著者不明') ? matched.author : book.author,
-          category: matched.category || book.category,
+          category: finalCategory,
           series: matched.series || book.series,
           release: (matched.release && matched.release !== '不明') ? matched.release : book.release,
           image: (matched.image && !matched.image.includes('placeholder')) ? matched.image : book.image,
+          cCode: matched.cCode || null,
           enriched: matched.enriched || false
         };
       }
@@ -430,6 +510,14 @@ async function fetchBooklogData() {
     elements.chatStatus.textContent = `${state.books.length}冊の本棚データを認識`;
     filterAndRenderBooks();
     renderCategoryFilters();
+
+    // Save initially merged/reclassified books shelf to localStorage cache
+    try {
+      localStorage.setItem(`booklog_cached_books_${state.username}`, JSON.stringify(state.books));
+      console.log("Saved initially merged books shelf to localStorage cache.");
+    } catch (e) {
+      console.warn("Failed to cache books during merge:", e);
+    }
 
     // Enrich with OpenBD in background to populate author/release/publisher metadata
     enrichBookMetadata();
@@ -733,6 +821,7 @@ async function enrichBookMetadata() {
                 if (cCode) {
                   cCode = cCode.replace(/^C/i, '');
                   if (cCode.length === 4) {
+                    matchedBook.cCode = 'C' + cCode;
                     const formatDigit = cCode[1];
                     const genreCode = cCode.substring(2);
                     const genreNum = parseInt(genreCode, 10);
