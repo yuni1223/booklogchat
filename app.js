@@ -6,6 +6,7 @@
 const state = {
   username: localStorage.getItem('booklog_username') || 'yuni0228', // Default to user's public bookshelf
   geminiKey: localStorage.getItem('gemini_api_key') || '',
+  googleBooksKey: localStorage.getItem('google_books_api_key') || '',
   books: [],
   filteredBooks: [],
   selectedCategory: 'novel',
@@ -70,6 +71,7 @@ const elements = {
   settingsModal: document.getElementById('settings-modal'),
   inputBooklogUsername: document.getElementById('input-booklog-username'),
   inputGeminiKey: document.getElementById('input-gemini-key'),
+  inputGoogleBooksKey: document.getElementById('input-google-books-key'),
   btnSaveSettings: document.getElementById('btn-save-settings'),
   btnCancelSettings: document.getElementById('btn-cancel-settings'),
   btnCloseSettings: document.getElementById('btn-close-settings'),
@@ -203,9 +205,10 @@ function setupEventListeners() {
 }
 
 // Load configurations into input fields
-function loadSettingsUI() {
+  function loadSettingsUI() {
   elements.inputBooklogUsername.value = state.username;
   elements.inputGeminiKey.value = state.geminiKey;
+  elements.inputGoogleBooksKey.value = state.googleBooksKey;
   elements.currentUsernameDisplay.textContent = `@${state.username}`;
 }
 
@@ -213,6 +216,7 @@ function loadSettingsUI() {
 function openSettingsModal() {
   elements.inputBooklogUsername.value = state.username;
   elements.inputGeminiKey.value = state.geminiKey;
+  elements.inputGoogleBooksKey.value = state.googleBooksKey;
   elements.settingsModal.classList.add('active');
 }
 
@@ -223,12 +227,15 @@ function closeSettingsModal() {
 function saveSettings() {
   const newUsername = elements.inputBooklogUsername.value.trim() || 'hec';
   const newKey = elements.inputGeminiKey.value.trim();
+  const newGoogleKey = elements.inputGoogleBooksKey.value.trim();
 
   state.username = newUsername;
   state.geminiKey = newKey;
+  state.googleBooksKey = newGoogleKey;
 
   localStorage.setItem('booklog_username', newUsername);
   localStorage.setItem('gemini_api_key', newKey);
+  localStorage.setItem('google_books_api_key', newGoogleKey);
 
   loadSettingsUI();
   closeSettingsModal();
@@ -493,7 +500,147 @@ function extractCCode(item) {
   return null;
 }
 
-// Batch enrich book authors and publish dates using OpenBD API
+// Parse XML returned by NDL Search API (SRU format)
+function parseNDLXML(xmlText) {
+  try {
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+    
+    const records = xmlDoc.getElementsByTagName("record");
+    if (records.length === 0) return null;
+    
+    const recordData = records[0].getElementsByTagName("recordData")[0];
+    if (!recordData) return null;
+    
+    const rdfText = recordData.textContent;
+    const rdfDoc = parser.parseFromString(rdfText, "text/xml");
+    
+    // 1. Extract Title
+    let title = "";
+    const titleElem = rdfDoc.getElementsByTagName("dc:title")[0];
+    if (titleElem) {
+      const valueElem = titleElem.getElementsByTagName("rdf:value")[0];
+      title = valueElem ? valueElem.textContent : titleElem.textContent;
+    }
+    
+    // 2. Extract Creator / Author
+    let author = "";
+    const creatorElem = rdfDoc.getElementsByTagName("dc:creator")[0];
+    if (creatorElem) {
+      author = creatorElem.textContent;
+      author = author.replace(/\s*著(?:者)?$/, "").replace(/\/著$/, "").trim();
+    }
+    
+    // 3. Extract Publisher
+    let publisher = "";
+    const foafName = rdfDoc.getElementsByTagName("foaf:name")[0];
+    if (foafName) {
+      publisher = foafName.textContent;
+    } else {
+      const pubElem = rdfDoc.getElementsByTagName("dc:publisher")[0] || rdfDoc.getElementsByTagName("dcndl:publisher")[0];
+      if (pubElem) publisher = pubElem.textContent;
+    }
+    
+    // 4. Extract Publish Date
+    let pubdate = "";
+    const dateElem = rdfDoc.getElementsByTagName("dcterms:date")[0] || rdfDoc.getElementsByTagName("dcterms:issued")[0];
+    if (dateElem) {
+      const rawDate = dateElem.textContent;
+      const cleanDate = rawDate.replace(/[^0-9]/g, "");
+      if (cleanDate.length === 4) {
+        pubdate = cleanDate + "00";
+      } else if (cleanDate.length >= 6) {
+        pubdate = cleanDate.substring(0, 6);
+      } else {
+        pubdate = cleanDate;
+      }
+    }
+    
+    if (!title && !author && !publisher) return null;
+    
+    return {
+      title: title,
+      author: author,
+      publisher: publisher,
+      pubdate: pubdate
+    };
+  } catch (e) {
+    console.error("Failed to parse NDL XML:", e);
+    return null;
+  }
+}
+
+// Fetch book info from NDL Search API via SRU protocol
+async function fetchFromNDL(isbn) {
+  if (!isbn || !/^97[89][0-9]{10}$/.test(isbn)) return null;
+  
+  const url = `https://ndlsearch.ndl.go.jp/api/sru?operation=searchRetrieve&query=isbn=${isbn}&recordSchema=dcndl`;
+  
+  try {
+    const response = await fetchWithTimeout(url, { timeout: 4000 });
+    if (response.ok) {
+      const xmlText = await response.text();
+      return parseNDLXML(xmlText);
+    }
+    throw new Error(`HTTP ${response.status}`);
+  } catch (err) {
+    console.// Text-based fallback heuristic categorization for books
+function refineCategoryByText(book) {
+  const publisher = book.publisher || '';
+  const author = book.author || '';
+  const catLower = (book.category || '').toLowerCase();
+  
+  if (catLower === 'book' || catLower === 'general' || catLower === 'novel' || catLower === 'shinsho' || catLower === '一般書' || catLower === '単行本・その他' || catLower === '単行本') {
+    const pubUpper = publisher.toUpperCase();
+    const titleUpper = (book.title || '').toUpperCase();
+    const authorUpper = (book.author || '').toUpperCase();
+    
+    const hasShinshoKeyword = pubUpper.includes('新書') || pubUpper.includes('選書') || titleUpper.includes('新書') || titleUpper.includes('選書');
+    
+    if (hasShinshoKeyword) {
+      book.category = 'shinsho';
+    } else {
+      const nonFictionKeywords = ['論文', '概論', '総論', '原論', '各論', '資本論', '評論', '論稿', '科学', '哲学', '経済学', '政治学', '社会学', '心理学', '言語学', '物理学', '地学', '医学', '人文学', '神学', '法学', '理学', '工学', '農学', '統計学', '歴史学', '世界史', '日本史', '東洋史', '西洋史', '近代史', '現代史', '古代史', '歴史', '入門', 'わかる', '解説', '講義', '教養', '基礎', '技術', '図鑑', 'ビジネス', '仕事', '自己啓発', '実践', 'マーケティング', 'デザイン', '雑学', '不思議', '興奮', '教科書', '問題集', '学習', 'バイアス', '整理', '生産', '文明', '病原菌', '人類', '脳', '思考', '知の', '知的', '認知', '宇宙', '人生', '行動'];
+      
+      const nonFictionSeries = ['学芸文庫', 'ソフィア文庫', '学術文庫', 'NF文庫', 'NF'];
+      const nonFictionAuthors = ['池上彰', '内田樹', '新井紀子', '吉本隆明', '加藤諦三', '岸見一郎'];
+      
+      const isNonFictionSeries = nonFictionSeries.some(s => pubUpper.includes(s));
+      const hasNonFictionTitle = nonFictionKeywords.some(kw => titleUpper.includes(kw));
+      const isNonFictionAuthor = nonFictionAuthors.some(auth => authorUpper.includes(auth));
+      
+      const isNonFiction = isNonFictionSeries || hasNonFictionTitle || isNonFictionAuthor;
+      
+      const novelists = [
+        '中島敦', '太宰治', '芥川龍之介', '夏目漱石', '森鴎外', '川端康成', '三島由紀夫', '梶井基次郎', '江戸川乱歩', '坂口安吾', '有島武郎', '芥川竜之介',
+        '辻村深月', '村上春樹', '東野圭吾', '伊坂幸太郎', '宮部みゆき', '湊かなえ', '有川浩', '朝井リョウ', '住野よる', '米澤穂信', '西尾西', '西尾維新', '西尾', '綾辻行人', '新海誠', '知念実希人', '瀬尾まいこ', '重松清', '小野不由美', '宮下奈都', '三浦しをん', '池井戸潤', '川村元気', '誉田哲也', '星新一', '夏川草介', '原田マハ', '森見登美彦', '万城目学', '中村文則', '又吉直樹', '薬丸岳', '横山秀夫', 
+        '野村美月', '古野まほろ', '佐藤青南', '陸秋秋', '有栖川有栖', '北村薫', '恩田陸', '恒川光太郎', '貴志祐介', '我孫子武丸', '歌野晶午', '麻耶雄嵩', '法月綸太郎', '小野不由美',
+        '川口俊和', '柚月裕子', '雨穴', '浅田次郎', '奥田英朗', '荻原浩', '西加奈子', '加藤シゲアキ', '凪良ゆう', '一穂ミチ', '町田そのこ', '青山美智子', '小川糸', '綿矢りさ', '金原ひとみ', '川上未映子', '村田沙耶香', '平野啓一郎', '角田光代', '森絵都', '唯川恵', '林真理子', '赤川次郎', '西村京太郎', '内田康夫', '山崎豊子', '松本清張', '司馬遼太郎', '池波正太郎', '藤沢周平', '吉川英治'
+      ];
+      const isKnownNovelist = novelists.some(auth => authorUpper.includes(auth.toUpperCase()));
+      
+      const isFictionSeries = pubUpper.includes('文庫') || titleUpper.includes('文庫');
+      
+      const literaryPublishers = [
+        '新潮社', '講談社', '集英社', '文藝春秋', '幻冬舎', 'ポプラ社', '双葉社', '角川', 'KADOKAWA', '徳間書店', '光文社', '早川書房', '東京創元社', '文春', '実業之日本社', 'ポプラ文庫', '宝島社',
+        'サンマーク出版', '中央公論新社', '中央公論', '飛鳥新社', '祥伝社'
+      ];
+      const isLiteraryPublisher = literaryPublishers.some(pub => pubUpper.includes(pub));
+      
+      if (isKnownNovelist) {
+        book.category = 'novel';
+      } else if (isFictionSeries && !isNonFictionSeries && !isNonFiction) {
+        book.category = 'novel';
+      } else if (isLiteraryPublisher && !isNonFiction && !isNonFictionSeries) {
+        book.category = 'novel';
+      } else {
+        book.category = 'book';
+      }
+    }
+  }
+}
+
+// Batch enrich book authors and publish dates using OpenBD, NDL Search, and Google Books API
 async function enrichBookMetadata() {
   const unenrichedBooks = state.books.filter(b => !b.enriched);
   if (unenrichedBooks.length === 0) {
@@ -502,12 +649,11 @@ async function enrichBookMetadata() {
     return;
   }
 
-  // Convert all numeric ASINs (ISBN-10) to ISBN-13 for OpenBD
+  // Convert all numeric ASINs (ISBN-10) to ISBN-13 for OpenBD / NDL
   const isbnMap = {};
   unenrichedBooks.forEach(book => {
     if (book.asin && book.asin !== '不明') {
       const isbn13 = convertISBN10to13(book.asin);
-      // Valid numeric ISBN-13 check
       if (/^97[89][0-9]{10}$/.test(isbn13)) {
         isbnMap[isbn13] = book;
       }
@@ -517,12 +663,13 @@ async function enrichBookMetadata() {
   const isbn13s = Object.keys(isbnMap);
   let enrichedCount = 0;
 
-  // 1. Run OpenBD Batch query first (if any valid numeric ISBNs exist)
+  // ==========================================
+  // Layer 1: Run OpenBD Batch query (for valid ISBNs)
+  // ==========================================
   if (isbn13s.length > 0) {
     elements.chatStatus.textContent = '新規書籍の詳細情報を取得中...';
-    console.log(`Enriching metadata for ${isbn13s.length} books via OpenBD...`);
+    console.log(`[Layer 1: OpenBD] Enriching metadata for ${isbn13s.length} books...`);
 
-    // Split into chunks of 100 to avoid URL length limits
     const chunkSize = 100;
     const chunks = [];
     for (let i = 0; i < isbn13s.length; i += chunkSize) {
@@ -545,7 +692,6 @@ async function enrichBookMetadata() {
       const results = await Promise.all(promises);
       const openbdBooks = results.flat().filter(item => item !== null);
       
-      // Map fetched details back to state
       openbdBooks.forEach(item => {
         if (item && item.summary) {
           const isbn13 = item.summary.isbn;
@@ -554,7 +700,6 @@ async function enrichBookMetadata() {
           const publisher = item.summary.publisher || '不明';
           const cover = item.summary.cover;
           
-          // Find matching book in our list
           const matchedBook = isbnMap[isbn13];
           if (matchedBook) {
             const rawSeries = item.summary.series || '';
@@ -562,7 +707,6 @@ async function enrichBookMetadata() {
             if (resolvedSeries) {
               matchedBook.series = resolvedSeries;
             }
-            // PROTECT AUTHOR: Only overwrite if Booklog author is unknown
             if (matchedBook.author === '著者不明') {
               if (author && author !== '著者不明') {
                 matchedBook.author = author;
@@ -575,15 +719,12 @@ async function enrichBookMetadata() {
             if (publisher && publisher !== '不明') {
               matchedBook.publisher = publisher;
               
-              // Refine category dynamically using enriched publisher, title, and C-Code metadata
               const catLower = (matchedBook.category || '').toLowerCase();
               if (catLower === 'book' || catLower === 'general' || catLower === 'novel' || catLower === 'shinsho' || catLower === '一般書' || catLower === '単行本・その他' || catLower === '単行本') {
-                
-                // 1. Try to extract C-Code first (Gold standard)
                 let cCode = extractCCode(item);
                 let classifiedViaCCode = false;
                 if (cCode) {
-                  cCode = cCode.replace(/^C/i, ''); // Strip leading C if present
+                  cCode = cCode.replace(/^C/i, '');
                   if (cCode.length === 4) {
                     const formatDigit = cCode[1];
                     const genreCode = cCode.substring(2);
@@ -594,74 +735,20 @@ async function enrichBookMetadata() {
                     } else if (formatDigit === '2') {
                       matchedBook.category = 'shinsho';
                     } else if (genreNum >= 90 && genreNum <= 98) {
-                      matchedBook.category = 'novel'; // Literature / Stories -> 小説
+                      matchedBook.category = 'novel';
                     } else {
-                      matchedBook.category = 'book'; // Non-fiction, essays, academic -> 一般書
+                      matchedBook.category = 'book';
                     }
-                    
                     console.log(`C-Code based categorization for "${matchedBook.title}": ${cCode} -> ${matchedBook.category}`);
                     classifiedViaCCode = true;
                   }
                 }
                 
-                // 2. Heuristic fallback (If C-code is not available or invalid)
                 if (!classifiedViaCCode) {
-                  const pubUpper = publisher.toUpperCase();
-                  const titleUpper = (matchedBook.title || '').toUpperCase();
-                  const seriesUpper = (item.summary?.series || '').toUpperCase();
-                  const authorUpper = (matchedBook.author || '').toUpperCase();
-                  
-                  const hasShinshoKeyword = pubUpper.includes('新書') || pubUpper.includes('選書') || titleUpper.includes('新書') || titleUpper.includes('選書') || seriesUpper.includes('新書') || seriesUpper.includes('選書');
-                  
-                  if (hasShinshoKeyword) {
-                    matchedBook.category = 'shinsho';
-                  } else {
-                    // Common non-fiction/academic/trivia keywords (Avoid greedy single-character matches like '学', '論', '史')
-                    const nonFictionKeywords = ['論文', '概論', '総論', '原論', '各論', '資本論', '評論', '論稿', '科学', '哲学', '経済学', '政治学', '社会学', '心理学', '言語学', '物理学', '地学', '医学', '人文学', '神学', '法学', '理学', '工学', '農学', '統計学', '歴史学', '世界史', '日本史', '東洋史', '西洋史', '近代史', '現代史', '古代史', '歴史', '入門', 'わかる', '解説', '講義', '教養', '基礎', '技術', '図鑑', 'ビジネス', '仕事', '自己啓発', '実践', 'マーケティング', 'デザイン', '雑学', '不思議', '興奮', '教科書', '問題集', '学習', 'バイアス', '整理', '生産', '文明', '病原菌', '人類', '脳', '思考', '知の', '知的', '認知', '宇宙', '人生', '行動'];
-                    
-                    // Specific non-fiction series
-                    const nonFictionSeries = ['学芸文庫', 'ソフィア文庫', '学術文庫', 'NF文庫', 'NF'];
-                    const nonFictionAuthors = ['池上彰', '内田樹', '新井紀子', '吉本隆明', '加藤諦三', '岸見一郎'];
-                    
-                    const isNonFictionSeries = nonFictionSeries.some(s => seriesUpper.includes(s) || pubUpper.includes(s));
-                    const hasNonFictionTitle = nonFictionKeywords.some(kw => titleUpper.includes(kw));
-                    const isNonFictionAuthor = nonFictionAuthors.some(auth => authorUpper.includes(auth));
-                    
-                    const isNonFiction = isNonFictionSeries || hasNonFictionTitle || isNonFictionAuthor;
-                    
-                    // Expanded list of known fiction novelists (including classical & modern ones to cover classic paperbacks)
-                    const novelists = [
-                      '中島敦', '太宰治', '芥川龍之介', '夏目漱石', '森鴎外', '川端康成', '三島由紀夫', '梶井基次郎', '江戸川乱歩', '坂口安吾', '有島武郎', '芥川竜之介',
-                      '辻村深月', '村上春樹', '東野圭吾', '伊坂幸太郎', '宮部みゆき', '湊かなえ', '有川浩', '朝井リョウ', '住野よる', '米澤穂信', '西尾西', '西尾維新', '西尾', '綾辻行人', '新海誠', '知念実希人', '瀬尾まいこ', '重松清', '小野不由美', '宮下奈都', '三浦しをん', '池井戸潤', '川村元気', '誉田哲也', '星新一', '夏川草介', '原田マハ', '森見登美彦', '万城目学', '中村文則', '又吉直樹', '薬丸岳', '横山秀夫', 
-                      '野村美月', '古野まほろ', '佐藤青南', '陸秋秋', '有栖川有栖', '北村薫', '恩田陸', '恒川光太郎', '貴志祐介', '我孫子武丸', '歌野晶午', '麻耶雄嵩', '法月綸太郎', '小野不由美',
-                      '川口俊和', '柚月裕子', '雨穴', '浅田次郎', '奥田英朗', '荻原浩', '西加奈子', '加藤シゲアキ', '凪良ゆう', '一穂ミチ', '町田そのこ', '青山美智子', '小川糸', '綿矢りさ', '金原ひとみ', '川上未映子', '村田沙耶香', '平野啓一郎', '角田光代', '森絵都', '唯川恵', '林真理子', '赤川次郎', '西村京太郎', '内田康夫', '山崎豊子', '松本清張', '司馬遼太郎', '池波正太郎', '藤沢周平', '吉川英治'
-                    ];
-                    const isKnownNovelist = novelists.some(auth => authorUpper.includes(auth.toUpperCase()));
-                    
-                    // Standard fiction bunko imprint matching (contains '文庫', 'ミステリ', '推理' and is not non-fiction)
-                    const isFictionSeries = seriesUpper.includes('文庫') || seriesUpper.includes('ミステリ') || seriesUpper.includes('推理') || pubUpper.includes('文庫') || titleUpper.includes('文庫');
-                    
-                    // Major literary publishers that publish hardcover novels
-                    const literaryPublishers = [
-                      '新潮社', '講談社', '集英社', '文藝春秋', '幻冬舎', 'ポプラ社', '双葉社', '角川', 'KADOKAWA', '徳間書店', '光文社', '早川書房', '東京創元社', '文春', '実業之日本社', 'ポプラ文庫', '宝島社',
-                      'サンマーク出版', '中央公論新社', '中央公論', '飛鳥新社', '祥伝社'
-                    ];
-                    const isLiteraryPublisher = literaryPublishers.some(pub => pubUpper.includes(pub));
-                    
-                    if (isKnownNovelist) {
-                      matchedBook.category = 'novel';
-                    } else if (isFictionSeries && !isNonFictionSeries && !isNonFiction) {
-                      matchedBook.category = 'novel'; // Standard fiction bunko (like '文学少女', '青の数学', 'i')
-                    } else if (isLiteraryPublisher && !isNonFiction && !isNonFictionSeries) {
-                      matchedBook.category = 'novel'; // Standard fiction hardcover
-                    } else {
-                      matchedBook.category = 'book'; // Default to 一般書
-                    }
-                  }
+                  refineCategoryByText(matchedBook);
                 }
               }
             }
-            // If OpenBD has a high-res cover image, use it!
             if (cover) {
               matchedBook.image = cover;
             }
@@ -671,13 +758,11 @@ async function enrichBookMetadata() {
 
       console.log(`Successfully enriched author/publisher info for ${enrichedCount} books via OpenBD.`);
       
-      // Mark books found in OpenBD (or not needing Google Books) as enriched immediately
       unenrichedBooks.forEach(book => {
         if (book.publisher !== '不明' && book.author !== '著者不明') {
           book.enriched = true;
         }
       });
-      // Save cache after OpenBD to store intermediate success
       try {
         localStorage.setItem(`booklog_cached_books_${state.username}`, JSON.stringify(state.books));
       } catch (e) {
@@ -688,17 +773,68 @@ async function enrichBookMetadata() {
     }
   }
 
-  // 2. Query Google Books API as a fallback for STILL missing books
+  // ==========================================
+  // Layer 2: Query NDL Search API for remaining missing books
+  // ==========================================
+  const ndlMissingBooks = unenrichedBooks.filter(b => b.publisher === '不明' || b.author === '著者不明');
+  if (ndlMissingBooks.length > 0) {
+    console.log(`[Layer 2: NDL Search] Querying NDL Search API for ${ndlMissingBooks.length} remaining/missing books...`);
+    elements.chatStatus.textContent = '新規書籍情報をNDLサーチで検索中...';
+    
+    const ndlBooksToQuery = ndlMissingBooks.slice(0, 20); // Limit parallel load
+    
+    const ndlPromises = ndlBooksToQuery.map(async (book, idx) => {
+      await new Promise(resolve => setTimeout(resolve, idx * 100)); // stagger API requests
+      
+      const isbn13 = convertISBN10to13(book.asin);
+      if (book.asin && book.asin !== '不明' && /^97[89][0-9]{10}$/.test(isbn13)) {
+        try {
+          const ndlInfo = await fetchFromNDL(isbn13);
+          if (ndlInfo) {
+            if (book.publisher === '不明' && ndlInfo.publisher) {
+              book.publisher = ndlInfo.publisher;
+            }
+            if (book.author === '著者不明' && ndlInfo.author) {
+              book.author = cleanAuthorName(ndlInfo.author);
+            }
+            if (book.release === '不明' && ndlInfo.pubdate) {
+              book.release = formatPubDate(ndlInfo.pubdate);
+            }
+            
+            refineCategoryByText(book);
+            console.log(`[NDL Search API] Enriched "${book.title}" -> Pub: ${book.publisher}, Auth: ${book.author}`);
+          }
+        } catch (err) {
+          console.warn(`NDL Search API enrichment failed for "${book.title}":`, err);
+        }
+      }
+    });
+
+    await Promise.all(ndlPromises);
+    
+    unenrichedBooks.forEach(book => {
+      if (book.publisher !== '不明' && book.author !== '著者不明') {
+        book.enriched = true;
+      }
+    });
+    try {
+      localStorage.setItem(`booklog_cached_books_${state.username}`, JSON.stringify(state.books));
+    } catch (e) {
+      console.warn("Failed to cache books after NDL fallback:", e);
+    }
+  }
+
+  // ==========================================
+  // Layer 3: Query Google Books API for remaining missing books
+  // ==========================================
   const missingBooks = unenrichedBooks.filter(b => b.publisher === '不明' || b.author === '著者不明');
   if (missingBooks.length > 0) {
-    console.log(`Querying Google Books API for ${missingBooks.length} remaining/missing books...`);
+    console.log(`[Layer 3: Google Books] Querying Google Books API for ${missingBooks.length} remaining/missing books...`);
     elements.chatStatus.textContent = '新規書籍情報をGoogle Booksで検索中...';
     
     const booksToQuery = missingBooks.slice(0, 20);
     
-    // Process all missing books in parallel to prevent UI status hanging
     const googlePromises = booksToQuery.map(async (book, idx) => {
-      // Stagger the starts slightly to be nice to the API
       await new Promise(resolve => setTimeout(resolve, idx * 100));
       
       let query = '';
@@ -716,11 +852,30 @@ async function enrichBookMetadata() {
         }
       }
 
-      const url = `https://www.googleapis.com/books/v1/volumes?q=${query}&maxResults=3`;
+      let url = `https://www.googleapis.com/books/v1/volumes?q=${query}&maxResults=3`;
+      if (state.googleBooksKey) {
+        url += `&key=${state.googleBooksKey}`;
+      }
+
       try {
-        let response = await fetchWithTimeout(url, { timeout: 4000 });
-        if (!response.ok || response.status === 429) {
-          console.warn(`Direct Google Books API query rate limited or failed (${response.status}), falling back to CORS proxies for "${book.title}"...`);
+        let response = null;
+        
+        // 1. If API Key is available, try direct query first (no proxy)
+        if (state.googleBooksKey) {
+          try {
+            response = await fetchWithTimeout(url, { timeout: 3000 });
+            if (!response.ok) {
+              console.warn(`Direct Google Books API query with API Key failed (${response.status}) for "${book.title}". Trying proxies...`);
+              response = null; // fallback to proxies
+            }
+          } catch (e) {
+            console.warn(`Direct Google Books API query error for "${book.title}":`, e);
+            response = null; // fallback to proxies
+          }
+        }
+        
+        // 2. Fallback to CORS proxies if direct access failed or no API Key
+        if (!response || !response.ok) {
           const fallbackProxies = [
             u => `https://corsproxy.io/?${encodeURIComponent(u)}`,
             u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
@@ -729,7 +884,6 @@ async function enrichBookMetadata() {
           for (const proxy of fallbackProxies) {
             try {
               const proxiedUrl = proxy(url);
-              // Safe timeout: 1500ms instead of 5000ms to fail fast and prevent thread hanging
               const proxyResp = await fetchWithTimeout(proxiedUrl, { timeout: 1500 });
               if (proxyResp.ok) {
                 response = proxyResp;
@@ -741,9 +895,8 @@ async function enrichBookMetadata() {
           }
         }
         
-        if (response.ok) {
+        if (response && response.ok) {
           let data = await response.json();
-          // Extract nested data if returned via wrapper proxy like AllOrigins
           if (data && data.contents) {
             if (typeof data.contents === 'string') {
               try {
@@ -772,19 +925,7 @@ async function enrichBookMetadata() {
                 book.image = info.imageLinks.thumbnail.replace('http://', 'https://');
               }
               
-              if (book.category === 'book' || book.category === '一般書') {
-                const pubUpper = (book.publisher || '').toUpperCase();
-                const titleUpper = (book.title || '').toUpperCase();
-                const authorUpper = (book.author || '').toUpperCase();
-                const novelists = ['中島敦', '太宰治', '芥川龍之介', '夏目漱石', '森鴎外', '川端康成', '三島由紀夫', '梶井基次郎', '江戸川乱歩', '坂口安吾', '有島武郎', '芥川竜之介', '辻村深月', '村上春樹', '東野圭吾', '伊坂幸太郎', '宮部みゆき', '湊かなえ', '有川浩', '朝井リョウ', '住野よる', '米澤穂信', '西尾西', '西尾維新', '西尾', '綾辻行人', '新海誠', '知念実希人', '瀬尾まいこ', '重松清', '小野不由美', '宮下奈都', '三浦しをん', '池井戸潤', '川村元気', '誉田哲也', '星新一', '夏川草介', '原田マハ', '森見登美彦', '万城目学', '中村文則', '又吉引樹', '又吉直樹', '薬丸岳', '横山秀夫'];
-                const isKnownNovelist = novelists.some(auth => authorUpper.includes(auth.toUpperCase()));
-                const literaryPublishers = ['新潮社', '講談社', '集英社', '文藝春秋', '幻冬舎', 'ポプラ社', '双葉社', '角川', 'KADOKAWA', '徳間書店', '光文社', '早川書房', '東京創元社', '文春', '実業之日本社', 'ポプラ文庫', '宝島社', 'サンマーク出版', '中央公論新社', '中央公論', '飛鳥新社', '祥伝社'];
-                const isLiteraryPublisher = literaryPublishers.some(pub => pubUpper.includes(pub));
-                
-                if (isKnownNovelist || isLiteraryPublisher) {
-                  book.category = 'novel';
-                }
-              }
+              refineCategoryByText(book);
               console.log(`[Google Books API] Enriched "${book.title}" -> Pub: ${book.publisher}, Auth: ${book.author}`);
             }
           }
@@ -793,14 +934,11 @@ async function enrichBookMetadata() {
         console.warn(`Google Books API fallback failed for "${book.title}":`, err);
       }
       
-      // Mark this book as enriched immediately
       book.enriched = true;
     });
 
-    // Wait for all parallel Google Books API queries to complete
     await Promise.all(googlePromises);
     
-    // Save cache after Google Books queries finish
     try {
       localStorage.setItem(`booklog_cached_books_${state.username}`, JSON.stringify(state.books));
     } catch (e) {
@@ -808,12 +946,12 @@ async function enrichBookMetadata() {
     }
   }
 
-  // Mark all processed books as enriched to prevent redundant runs on future reloads
+  // Mark all processed books as enriched
   unenrichedBooks.forEach(book => {
     book.enriched = true;
   });
 
-  // 3. Re-resolve series names for all books using fully enriched metadata (fixes missing series on late-enriched items)
+  // 3. Re-resolve series names for all books using fully enriched metadata
   state.books.forEach(book => {
     const resolved = resolveBookSeries(book, book.series);
     if (resolved) {
