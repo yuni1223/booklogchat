@@ -676,7 +676,7 @@ function refineCategoryByText(book) {
 
 // Batch enrich book authors and publish dates using OpenBD, NDL Search, and Google Books API
 async function enrichBookMetadata() {
-  const unenrichedBooks = state.books.filter(b => !b.enriched);
+  const unenrichedBooks = state.books.filter(b => !b.enriched || b.publisher === '不明' || b.author === '著者不明');
   if (unenrichedBooks.length === 0) {
     console.log("All books are already enriched. Skipping API queries.");
     elements.chatStatus.textContent = `${state.books.length}冊の本棚データを同期完了`;
