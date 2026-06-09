@@ -584,7 +584,41 @@ async function fetchFromNDL(isbn) {
     }
     throw new Error(`HTTP ${response.status}`);
   } catch (err) {
-    console.// Text-based fallback heuristic categorization for books
+    console.warn(`Direct NDL API fetch failed for ISBN ${isbn}, trying proxies:`, err);
+    
+    const proxies = [
+      u => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+      u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+      u => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`
+    ];
+    
+    for (const proxy of proxies) {
+      try {
+        const proxiedUrl = proxy(url);
+        const response = await fetchWithTimeout(proxiedUrl, { timeout: 2000 });
+        if (response.ok) {
+          let xmlText = await response.text();
+          if (xmlText.startsWith("{") || xmlText.startsWith("[")) {
+            try {
+              const data = JSON.parse(xmlText);
+              if (data && data.contents) {
+                xmlText = data.contents;
+              }
+            } catch (e) {
+              console.warn("Failed to parse AllOrigins JSON wrapper for NDL:", e);
+            }
+          }
+          return parseNDLXML(xmlText);
+        }
+      } catch (e) {
+        console.warn(`Proxy failed for NDL Search API:`, e);
+      }
+    }
+  }
+  return null;
+}
+
+// Text-based fallback heuristic categorization for books
 function refineCategoryByText(book) {
   const publisher = book.publisher || '';
   const author = book.author || '';
