@@ -357,31 +357,13 @@ async function fetchBooklogData() {
             title: cleanPublisherLabel(book.title || '無題'),
             author: cleanAuthorName(book.author || '著者不明'),
             image: coverImage,
-            category: (() => {
-              let cat = book.catalog || 'その他';
-              if (cat.toLowerCase() === 'book') {
-                const titleUpper = (book.title || '').toUpperCase();
-                
-                // 1. Shinsho Check
-                const isShinsho = titleUpper.includes('新書') || titleUpper.includes('選書');
-                if (isShinsho) return 'shinsho';
-                
-                // 2. Novel (物語文) Check
-                const hasNovelKeyword = titleUpper.includes('文庫') || titleUpper.includes('小説') || titleUpper.includes('選集') || titleUpper.includes('ミステリ') || titleUpper.includes('推理');
-                
-                // Avoid single-character greedy keywords like '学' or '論' matching '数学', '文学', '論理'
-                const nonFictionKeywords = ['論文', '概論', '総論', '原論', '各論', '資本論', '評論', '論稿', '科学', '哲学', '経済学', '政治学', '社会学', '心理学', '言語学', '物理学', '地学', '医学', '人文学', '神学', '法学', '理学', '工学', '農学', '統計学', '歴史学', '世界史', '日本史', '東洋史', '西洋史', '近代史', '現代史', '古代史', '歴史', '入門', 'わかる', '解説', '講義', '教養', '基礎', '技術', '図鑑', 'ビジネス', '仕事', '自己啓発', '実践', 'マーケティング', 'デザイン', '雑学', '不思議', '興奮', 'バイアス', '整理', '生産', '文明', '病原菌', '人類', '脳', '思考', '知の', '知的', '認知', '宇宙', '人生', '行動'];
-                const hasNonFictionTitle = nonFictionKeywords.some(kw => titleUpper.includes(kw));
-                
-                if (hasNovelKeyword && !hasNonFictionTitle) {
-                  return 'novel';
-                }
-                
-                // 3. Default general non-fiction book
-                return 'book';
-              }
-              return cat;
-            })(),
+            category: determineBookCategory(
+              book.title || '無題',
+              '不明',
+              book.series || '',
+              cleanAuthorName(book.author || '著者不明'),
+              book.catalog || ''
+            ),
             release: book.release || '不明',
             publisher: '不明', // will be enriched
             series: (() => {
@@ -618,60 +600,51 @@ async function fetchFromNDL(isbn) {
   return null;
 }
 
-// Text-based fallback heuristic categorization for books
-function refineCategoryByText(book) {
-  const publisher = book.publisher || '';
-  const author = book.author || '';
-  const catLower = (book.category || '').toLowerCase();
+// Determine category for a book based on its metadata
+function determineBookCategory(title, publisher, series, author, originalCatalog) {
+  const titleUpper = (title || '').toUpperCase();
+  const pubUpper = (publisher || '').toUpperCase();
+  const seriesUpper = (series || '').toUpperCase();
+  const authorUpper = (author || '').toUpperCase();
   
-  if (catLower === 'book' || catLower === 'general' || catLower === 'novel' || catLower === 'shinsho' || catLower === '一般書' || catLower === '単行本・その他' || catLower === '単行本') {
-    const pubUpper = publisher.toUpperCase();
-    const titleUpper = (book.title || '').toUpperCase();
-    const authorUpper = (book.author || '').toUpperCase();
-    
-    const hasShinshoKeyword = pubUpper.includes('新書') || pubUpper.includes('選書') || titleUpper.includes('新書') || titleUpper.includes('選書');
-    
-    if (hasShinshoKeyword) {
-      book.category = 'shinsho';
-    } else {
-      const nonFictionKeywords = ['論文', '概論', '総論', '原論', '各論', '資本論', '評論', '論稿', '科学', '哲学', '経済学', '政治学', '社会学', '心理学', '言語学', '物理学', '地学', '医学', '人文学', '神学', '法学', '理学', '工学', '農学', '統計学', '歴史学', '世界史', '日本史', '東洋史', '西洋史', '近代史', '現代史', '古代史', '歴史', '入門', 'わかる', '解説', '講義', '教養', '基礎', '技術', '図鑑', 'ビジネス', '仕事', '自己啓発', '実践', 'マーケティング', 'デザイン', '雑学', '不思議', '興奮', '教科書', '問題集', '学習', 'バイアス', '整理', '生産', '文明', '病原菌', '人類', '脳', '思考', '知の', '知的', '認知', '宇宙', '人生', '行動'];
-      
-      const nonFictionSeries = ['学芸文庫', 'ソフィア文庫', '学術文庫', 'NF文庫', 'NF'];
-      const nonFictionAuthors = ['池上彰', '内田樹', '新井紀子', '吉本隆明', '加藤諦三', '岸見一郎'];
-      
-      const isNonFictionSeries = nonFictionSeries.some(s => pubUpper.includes(s));
-      const hasNonFictionTitle = nonFictionKeywords.some(kw => titleUpper.includes(kw));
-      const isNonFictionAuthor = nonFictionAuthors.some(auth => authorUpper.includes(auth));
-      
-      const isNonFiction = isNonFictionSeries || hasNonFictionTitle || isNonFictionAuthor;
-      
-      const novelists = [
-        '中島敦', '太宰治', '芥川龍之介', '夏目漱石', '森鴎外', '川端康成', '三島由紀夫', '梶井基次郎', '江戸川乱歩', '坂口安吾', '有島武郎', '芥川竜之介',
-        '辻村深月', '村上春樹', '東野圭吾', '伊坂幸太郎', '宮部みゆき', '湊かなえ', '有川浩', '朝井リョウ', '住野よる', '米澤穂信', '西尾西', '西尾維新', '西尾', '綾辻行人', '新海誠', '知念実希人', '瀬尾まいこ', '重松清', '小野不由美', '宮下奈都', '三浦しをん', '池井戸潤', '川村元気', '誉田哲也', '星新一', '夏川草介', '原田マハ', '森見登美彦', '万城目学', '中村文則', '又吉直樹', '薬丸岳', '横山秀夫', 
-        '野村美月', '古野まほろ', '佐藤青南', '陸秋秋', '有栖川有栖', '北村薫', '恩田陸', '恒川光太郎', '貴志祐介', '我孫子武丸', '歌野晶午', '麻耶雄嵩', '法月綸太郎', '小野不由美',
-        '川口俊和', '柚月裕子', '雨穴', '浅田次郎', '奥田英朗', '荻原浩', '西加奈子', '加藤シゲアキ', '凪良ゆう', '一穂ミチ', '町田そのこ', '青山美智子', '小川糸', '綿矢りさ', '金原ひとみ', '川上未映子', '村田沙耶香', '平野啓一郎', '角田光代', '森絵都', '唯川恵', '林真理子', '赤川次郎', '西村京太郎', '内田康夫', '山崎豊子', '松本清張', '司馬遼太郎', '池波正太郎', '藤沢周平', '吉川英治'
-      ];
-      const isKnownNovelist = novelists.some(auth => authorUpper.includes(auth.toUpperCase()));
-      
-      const isFictionSeries = pubUpper.includes('文庫') || titleUpper.includes('文庫');
-      
-      const literaryPublishers = [
-        '新潮社', '講談社', '集英社', '文藝春秋', '幻冬舎', 'ポプラ社', '双葉社', '角川', 'KADOKAWA', '徳間書店', '光文社', '早川書房', '東京創元社', '文春', '実業之日本社', 'ポプラ文庫', '宝島社',
-        'サンマーク出版', '中央公論新社', '中央公論', '飛鳥新社', '祥伝社'
-      ];
-      const isLiteraryPublisher = literaryPublishers.some(pub => pubUpper.includes(pub));
-      
-      if (isKnownNovelist) {
-        book.category = 'novel';
-      } else if (isFictionSeries && !isNonFictionSeries && !isNonFiction) {
-        book.category = 'novel';
-      } else if (isLiteraryPublisher && !isNonFiction && !isNonFictionSeries) {
-        book.category = 'novel';
-      } else {
-        book.category = 'book';
-      }
-    }
+  // 1. Comic Check
+  const comicKeywords = ['コミック', 'COMICS', '漫画', '画集', 'マンガ', 'コミックス'];
+  if (comicKeywords.some(kw => titleUpper.includes(kw) || seriesUpper.includes(kw) || pubUpper.includes(kw)) || originalCatalog === 'comic') {
+    return 'comic';
   }
+
+  // 2. Shinsho / Sensho Check
+  const isShinsho = pubUpper.includes('新書') || pubUpper.includes('選書') || titleUpper.includes('新書') || titleUpper.includes('選書') || seriesUpper.includes('新書') || seriesUpper.includes('選書');
+  if (isShinsho) {
+    return 'shinsho';
+  }
+
+  // 3. Non-fiction (book) Check
+  // We classify as 'book' only if there are explicit non-fiction / learning keywords
+  const nonFictionKeywords = [
+    '論文', '概論', '総論', '原論', '各論', '資本論', '評論', '論稿',
+    '入門', 'わかる', '解説', '講義', '教養', '基礎', '技術', '図鑑',
+    'ビジネス', '仕事', '自己啓発', '実践', 'マーケティング', 'デザイン',
+    '雑学', 'バイアス', '整理', '生産', '文明', '病原菌', '教科書', '問題集',
+    '学習', '科学', '哲学', '経済', '政治', '社会', '心理', '統計', '歴史',
+    '物理', '数学', '医学', '人文学', '統計学', '歴史学', '宇宙', '行動', '脳', '思考'
+  ];
+  const nonFictionSeries = ['学芸文庫', 'ソフィア文庫', '学術文庫', 'NF文庫', 'NF'];
+  const nonFictionAuthors = ['池上彰', '内田樹', '新井紀子', '吉本隆明', '加藤諦三', '岸見一郎'];
+
+  const hasNonFictionTitle = nonFictionKeywords.some(kw => titleUpper.includes(kw));
+  const isNonFictionSeries = nonFictionSeries.some(s => seriesUpper.includes(s) || pubUpper.includes(s));
+  const isNonFictionAuthor = nonFictionAuthors.some(auth => authorUpper.includes(auth));
+
+  // Special Exception: "小説全集" or "文学全集" is always a novel
+  const isLiteraryCollection = titleUpper.includes('小説全集') || titleUpper.includes('文学全集') || titleUpper.includes('ミステリ全集');
+
+  if ((hasNonFictionTitle || isNonFictionSeries || isNonFictionAuthor) && !isLiteraryCollection) {
+    return 'book';
+  }
+
+  // 4. Default: Novel (literature/fiction)
+  return 'novel';
 }
 
 // Batch enrich book authors and publish dates using OpenBD, NDL Search, and Google Books API
@@ -779,7 +752,13 @@ async function enrichBookMetadata() {
                 }
                 
                 if (!classifiedViaCCode) {
-                  refineCategoryByText(matchedBook);
+                  matchedBook.category = determineBookCategory(
+                    matchedBook.title,
+                    matchedBook.publisher,
+                    matchedBook.series || (item.summary ? item.summary.series : ''),
+                    matchedBook.author,
+                    matchedBook.category
+                  );
                 }
               }
             }
@@ -835,7 +814,13 @@ async function enrichBookMetadata() {
               book.release = formatPubDate(ndlInfo.pubdate);
             }
             
-            refineCategoryByText(book);
+            book.category = determineBookCategory(
+              book.title,
+              book.publisher,
+              book.series || (ndlInfo.series || ''),
+              book.author,
+              book.category
+            );
             console.log(`[NDL Search API] Enriched "${book.title}" -> Pub: ${book.publisher}, Auth: ${book.author}`);
           }
         } catch (err) {
@@ -959,7 +944,13 @@ async function enrichBookMetadata() {
                 book.image = info.imageLinks.thumbnail.replace('http://', 'https://');
               }
               
-              refineCategoryByText(book);
+              book.category = determineBookCategory(
+                book.title,
+                book.publisher,
+                book.series || '',
+                book.author,
+                book.category
+              );
               console.log(`[Google Books API] Enriched "${book.title}" -> Pub: ${book.publisher}, Auth: ${book.author}`);
             }
           }
